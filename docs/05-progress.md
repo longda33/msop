@@ -179,6 +179,29 @@
   3. `ScanNotifier` 与 `LocalScanWorker` 无单测（依赖 Android 运行时）。
 - 给下一位的提醒：想真机验证这条链路，需要先装模拟器，然后手动授权 `READ_MEDIA_AUDIO`（或先在 P1-04 把申请流程做出来），再 `adb logcat -s PrimuseLite:V` 看「已排入扫描任务」→「本地库同步开始/结束」两对日志。若看到 `WorkerFactory` 相关异常，说明 manifest 的 initializer 移除没生效。
 
+### 2026-11-11 · P1-04 · 权限申请与门禁（逻辑完成，真机流程待验证）
+- 做了什么：把音频权限的申请、拒绝处理、永久拒绝引导全部做完，并接成 App 启动门禁。扫描现在只有在授权后才会触发。
+- 新增/修改文件：
+  - `feature/local/.../permission/AudioPermission.kt` — 重写。新增 `PermissionUiState` 四态、`requestable()`、`hasAskedBefore/markAsked`（SharedPreferences）、纯函数 `resolvePermissionState`
+  - `feature/local/src/test/.../PermissionStateTest.kt` — 6 个单测覆盖四态判定
+  - `app/.../ui/permission/AudioPermissionGate.kt` — Compose 门禁，含请求、去设置、回前台重判
+  - `app/.../MainActivity.kt` — 用门禁包裹 `PrimuseApp`，授权后才触发扫描（`scanTriggered` 防重复）
+- 关键决策：
+  1. **权限判定做成纯函数** `resolvePermissionState(granted, shouldShowRationale, askedBefore)` — Android 的三态判断很绕，抽出来后能在无设备环境完整单测
+  2. **区分「可再问」与「永久拒绝」** — 前者还能弹系统对话框，后者只能跳设置页。混为一谈会让用户点了按钮没反应
+  3. **音频权限与通知权限一次请求** — 13+ 没有 `POST_NOTIFICATIONS` 扫描进度通知不显示，分两次问打扰用户
+  4. **`askedBefore` 存 SharedPreferences 而非 DataStore** — 只为一个布尔值引入 DataStore 不划算，等 `core:datastore` 正式落地再迁
+  5. **门禁放在 `:app` 而非 `feature:local`** — `:app` 已有 Compose，不必为一个临时门禁给 feature 模块加 Compose 插件
+- 界面说明：门禁页是**功能性临时界面**，不是最终设计，已在文件头标注。UI 定稿后应替换为正式空状态页，判定逻辑可保留。
+- 验证方式：
+  - `./gradlew :app:assembleDebug` → **BUILD SUCCESSFUL**
+  - `./gradlew test` → **25 个测试，0 失败**（原 19 + 权限 6）
+- 遗留问题：
+  1. **真机流程未验证**：拒绝一次能否再弹、永久拒绝是否跳设置、从设置返回后是否自动放行——三条都要设备。
+  2. 门禁界面是临时的，UI 定稿后要重做。
+  3. SAF 目录授权（`ACTION_OPEN_DOCUMENT_TREE`）仍未实现，属 P1-05。
+- 给下一位的提醒：**测试权限流程要准备一个干净的模拟器**。`askedBefore` 存在 SharedPreferences 里，反复测试时记得清数据（`adb shell pm clear com.primuse.lite`），否则会一直走「永久拒绝」分支，看起来像 bug。
+
 ---
 
 ## P6-01 真机走查清单

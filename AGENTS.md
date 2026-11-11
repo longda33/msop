@@ -26,9 +26,9 @@
 
 | 项 | 值 |
 |---|---|
-| 阶段 | **P0 基本完成（P0-03/P0-04 待真机验证）· P1 进行中（P1-01/02 完成，P1-03/08 逻辑完成待真机验证）** |
-| 代码量 | Kotlin 源码 **32 个**（其中单测 3 个文件 / 19 个用例）：app 4、core:common 3、core:database 6、core:model 2、feature:local 9、其余 feature 各 1 占位 |
-| 测试 | ✅ `./gradlew test` → **19 个测试，0 失败**（database 4 + feature:local 15） |
+| 阶段 | **P0 基本完成（待真机）· P1 进行中：P1-01/02 完成，P1-03/04/08 逻辑完成待真机验证** |
+| 代码量 | Kotlin 源码 **39 个**（单测 4 个文件 / 25 个用例）：app 5、core:common 3、core:database 8、core:model 2、feature:local 14、其余 7 个模块各 1 占位 |
+| 测试 | ✅ `./gradlew test` → **25 个测试，0 失败**（database 4 + local 21） |
 | 构建状态 | ✅ **已验证**：`./gradlew tasks` 与 `./gradlew :app:assembleDebug` 均 **BUILD SUCCESSFUL**（首次约 1h4m，增量约 1m；APK 12 MB）。本机具 Microsoft OpenJDK 21 + Android SDK（android-37 / build-tools 37.0.0）。⚠️ **无 adb 设备、无模拟器**，装机启动与界面验收仍未验证 |
 | 版本控制 | ✅ 已 `git init` 并提交首个 commit（2026-11-11），此前无历史 |
 | UI 状态 | ⚠️ **未确认**，`docs/06` §8 的 Q1–Q4 全待定，**禁止写界面代码** |
@@ -150,13 +150,14 @@ P0-03、P0-04、P1-03、P1-08 全部停在 `[?]` / `[~]`。
 **建议先装模拟器**（SDK Manager → Emulator + 一个 system image），然后按顺序补验：
 1. 装 APK，确认三个 Tab 能切（P0-03）
 2. `adb logcat -s PrimuseLite:V` 确认 `Application onCreate` 与崩溃捕获已安装（P0-04）
-3. 手动授权 `READ_MEDIA_AUDIO` 后重启 App，看「已排入扫描任务」→「本地库同步结束」（P1-03/P1-08）
+3. 首次启动应出现权限门禁 → 点「授予权限」→ 授权后自动排入扫描，日志出现「已排入扫描任务」→「本地库同步结束」（P1-04 / P1-03 / P1-08）
+4. 反复测权限流程前先 `adb shell pm clear com.primuse.lite`，否则 `askedBefore` 残留会让流程直接走「永久拒绝」分支
 
 ### 三条可并行的线（都不依赖 UI）
 
 | 线 | 任务 | 状态 |
 |---|---|---|
-| **A 本地数据** | P1-02 ✅ → P1-03 ⏳ → **P1-04（下一个）** → P1-05 → P1-06 → P1-07 → P1-08 ⏳ | 扫描已能跑，但**没有权限申请 UI，实际扫不到东西** |
+| **A 本地数据** | P1-02 ✅ → P1-03 ⏳ → P1-04 ⏳ → **P1-05（下一个）** → P1-06 → P1-07 → P1-08 ⏳ | 扫描与权限都已就绪，缺 SAF 自定义目录与封面提取 |
 | **B 播放内核** | P2-01 → P2-02 → P2-03 → P2-04 | 未开工 |
 | **C 远程音源** | P3-01 → P3-02 → P3-03 → P3-04 → P3-05 → P3-06 | 未开工 |
 
