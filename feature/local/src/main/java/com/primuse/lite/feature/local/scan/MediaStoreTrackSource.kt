@@ -136,10 +136,10 @@ class MediaStoreTrackSource(
             id = TrackIdFactory.localId(absolutePath),
             source = SourceType.LOCAL,
             uri = ContentUris.withAppendedId(collection, mediaId).toString(),
-            title = cursor.stringOrNull(MediaStore.Audio.Media.TITLE)
+            title = cursor.stringOrNull(MediaStore.Audio.Media.TITLE).clean()
                 ?: displayName.substringBeforeLast('.', displayName),
-            artist = cursor.stringOrNull(MediaStore.Audio.Media.ARTIST),
-            album = cursor.stringOrNull(MediaStore.Audio.Media.ALBUM),
+            artist = cursor.stringOrNull(MediaStore.Audio.Media.ARTIST).clean(),
+            album = cursor.stringOrNull(MediaStore.Audio.Media.ALBUM).clean(),
             albumId = if (albumIdValue > 0L) albumIdValue.toString() else null,
             durationMs = cursor.longOrZero(MediaStore.Audio.Media.DURATION),
             trackNo = cursor.intOrNull(MediaStore.Audio.Media.TRACK),
@@ -147,7 +147,7 @@ class MediaStoreTrackSource(
             year = cursor.intOrNull(MediaStore.Audio.Media.YEAR),
             coverUri = null,
             sizeBytes = cursor.longOrZero(MediaStore.Audio.Media.SIZE),
-            mimeType = cursor.stringOrNull(MediaStore.Audio.Media.MIME_TYPE),
+            mimeType = cursor.stringOrNull(MediaStore.Audio.Media.MIME_TYPE).clean(),
             localPath = absolutePath,
             // 单位：秒。与 ScanContract 的 since 保持一致。
             lastModified = cursor.longOrZero(MediaStore.Audio.Media.DATE_MODIFIED),
@@ -178,3 +178,10 @@ private fun Cursor.intOrNull(column: String): Int? {
     val index = columnIndexOrNull(column) ?: return null
     return if (isNull(index)) null else getInt(index)
 }
+
+/**
+ * MediaStore 用字面量 `<unknown>` 表示「标签缺失」，而不是 NULL。
+ * 直接入库会让 UI 显示出 "&lt;unknown&gt;" 这种东西，必须在边界处转成 null。
+ */
+internal fun String?.clean(): String? =
+    this?.trim()?.takeIf { it.isNotEmpty() && it != MediaStore.UNKNOWN_STRING }

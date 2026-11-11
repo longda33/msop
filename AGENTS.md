@@ -26,9 +26,10 @@
 
 | 项 | 值 |
 |---|---|
-| 阶段 | **P0 基本完成（待真机）· P1 进行中：P1-01/02 完成，P1-03/04/08 逻辑完成待真机验证** |
-| 代码量 | Kotlin 源码 **39 个**（单测 4 个文件 / 25 个用例）：app 5、core:common 3、core:database 8、core:model 2、feature:local 14、其余 7 个模块各 1 占位 |
-| 测试 | ✅ `./gradlew test` → **25 个测试，0 失败**（database 4 + local 21） |
+| 阶段 | **P0 全部完成 · P1 进行中：P1-01/02/03/08 完成，P1-04 部分完成** |
+| 代码量 | Kotlin 源码 **40 个**（单测 5 个文件 / 29 个用例）：app 5、core:common 3、core:database 8、core:model 2、feature:local 15、其余 7 个模块各 1 占位 |
+| 测试 | ✅ `./gradlew test` → **29 个测试，0 失败**（database 4 + local 25） |
+| 真机验证 | ✅ 已在 **OPPO PJB110 / Android 12 (API 32)** 上验证：三 Tab、日志、权限门禁、扫描入库、通知。性能：1003 首全量 376ms、增量 35ms |
 | 构建状态 | ✅ **已验证**：`./gradlew tasks` 与 `./gradlew :app:assembleDebug` 均 **BUILD SUCCESSFUL**（首次约 1h4m，增量约 1m；APK 12 MB）。本机具 Microsoft OpenJDK 21 + Android SDK（android-37 / build-tools 37.0.0）。⚠️ **无 adb 设备、无模拟器**，装机启动与界面验收仍未验证 |
 | 版本控制 | ✅ 已 `git init` 并提交首个 commit（2026-11-11），此前无历史 |
 | UI 状态 | ⚠️ **未确认**，`docs/06` §8 的 Q1–Q4 全待定，**禁止写界面代码** |
@@ -140,29 +141,46 @@ data class Artist(val id: String, val name: String, val albumCount: Int, val tra
 
 ### 已完成的地基（不要再重复做）
 
-骨架、构建、`gradlew tasks`、Room 数据层、MediaStore 扫描、Hilt + WorkManager 接线、启动触发扫描——全部已落地并通过编译与 19 个单测。
+骨架、构建、`gradlew tasks`、Room 数据层、MediaStore 扫描、Hilt + WorkManager 接线、权限门禁、启动触发扫描——全部已落地，**并且已在真机（OPPO PJB110 / Android 12）上验证通过**。
 
-### 现在的真实卡点：**没有设备**
+### 真机调试速查（这些坑都踩过了）
 
-`adb devices` 为空，SDK 未装 emulator。因此所有「真机可见 / 真机可播 / 性能达标」类验收都做不了，
-P0-03、P0-04、P1-03、P1-08 全部停在 `[?]` / `[~]`。
+```bash
+# adb daemon 会随 shell 退出被杀，每次调用都要重连
+export PATH="$PATH:$LOCALAPPDATA/Android/Sdk/platform-tools"
+adb start-server && adb connect 127.0.0.1:5555
 
-**建议先装模拟器**（SDK Manager → Emulator + 一个 system image），然后按顺序补验：
-1. 装 APK，确认三个 Tab 能切（P0-03）
-2. `adb logcat -s PrimuseLite:V` 确认 `Application onCreate` 与崩溃捕获已安装（P0-04）
-3. 首次启动应出现权限门禁 → 点「授予权限」→ 授权后自动排入扫描，日志出现「已排入扫描任务」→「本地库同步结束」（P1-04 / P1-03 / P1-08）
-4. 反复测权限流程前先 `adb shell pm clear com.primuse.lite`，否则 `askedBefore` 残留会让流程直接走「永久拒绝」分支
+# 三台 transport 指向同一设备，必须用 -s 指定
+adb -s 127.0.0.1:5555 install -r -t app/build/outputs/apk/debug/app-debug.apk
+
+# Git Bash 会把 /sdcard/x 当本地路径，截图前必须关掉路径转换
+export MSYS_NO_PATHCONV=1
+
+# 让媒体库索引新推的文件（11+ 的广播和 scan_file 都失效了，只有这个能用）
+adb shell content call --uri content://media --method scan_volume --arg external_primary
+
+# 直接看数据库
+adb shell run-as com.primuse.lite sqlite3 databases/primuse-lite.db "SELECT * FROM tracks LIMIT 5;"
+```
+
+**⚠️ 这台设备会自动授予权限**，系统弹窗不会出现。想测拒绝流程必须换设备。
 
 ### 三条可并行的线（都不依赖 UI）
 
 | 线 | 任务 | 状态 |
 |---|---|---|
-| **A 本地数据** | P1-02 ✅ → P1-03 ⏳ → P1-04 ⏳ → **P1-05（下一个）** → P1-06 → P1-07 → P1-08 ⏳ | 扫描与权限都已就绪，缺 SAF 自定义目录与封面提取 |
+| **A 本地数据** | P1-02 ✅ → P1-03 ✅ → P1-04 ⚠️ → **P1-05（下一个）** → P1-06 → P1-07 → P1-08 ✅ | 扫描入库已跑通，缺 SAF 自定义目录、封面提取、双通道去重 |
 | **B 播放内核** | P2-01 → P2-02 → P2-03 → P2-04 | 未开工 |
 | **C 远程音源** | P3-01 → P3-02 → P3-03 → P3-04 → P3-05 → P3-06 | 未开工 |
 
-**推荐顺序**：P1-04（权限申请，解锁 A 线的真机验证）→ P2（播放内核）→ C（远程音源）。
+**推荐顺序**：P1-05（SAF 自定义目录 + 去重）→ P1-07（封面提取）→ P2（播放内核）→ C（远程音源）。
 C 的第一步 P3-01 必须实测 OpenList 的真实响应，不能照着文档写。
+
+### 已知缺口（真机测试发现的，尚未修）
+
+1. **删除文件不会从库中移除** —— `LocalLibrarySyncer` 只 upsert，没有清理逻辑。用户删歌后曲库会留幽灵条目。修法：全量扫描后对比库内 ID 集合，删除不存在的。
+2. **权限拒绝路径未真机验证** —— 设备自动授权，只有单测覆盖。
+3. **横屏未适配** —— 当前界面是竖屏布局，横屏可用但不好看。
 
 ### UI 相关的任务（P1-09、P2-05、P4-*、P5-02）全部挂起
 

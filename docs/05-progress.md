@@ -202,6 +202,37 @@
   3. SAF 目录授权（`ACTION_OPEN_DOCUMENT_TREE`）仍未实现，属 P1-05。
 - 给下一位的提醒：**测试权限流程要准备一个干净的模拟器**。`askedBefore` 存在 SharedPreferences 里，反复测试时记得清数据（`adb shell pm clear com.primuse.lite`），否则会一直走「永久拒绝」分支，看起来像 bug。
 
+### 2026-11-11 · 真机验证 · 首次在设备上跑通全链路，修掉一个真 bug
+- 设备：**OPPO PJB110，Android 12（API 32），1280×720 横屏**，通过 `adb connect 127.0.0.1:5555` 连接（另有 `:16384` 与 `emulator-5554` 两个 transport 指向同一台）。
+- 验证结论：
+
+| 任务 | 结论 | 证据 |
+|---|---|---|
+| P0-03 | ✅ 通过 | 截图 `docs/reference/device-verification/02-main-tabs.png`：三 Tab 可见可切换 |
+| P0-04 | ✅ 通过 | logcat：`Application onCreate 开始` / `崩溃捕获已安装，启动完成` |
+| P1-03 | ✅ 通过 | 1003 首全量 **376ms**、增量 **35ms**；外推 1 万首约 3.8s |
+| P1-04 | ⚠️ 部分 | 门禁渲染与授权放行已验证（截图 `01-permission-gate.png`）；**拒绝/重试无法验证** |
+| P1-08 | ✅ 通过 | 通知栏确认「扫描完成：共 3 首，写入 3 首」；Worker 日志 SUCCESS |
+
+- **发现并修复的真 bug**：MediaStore 用字面量 `<unknown>` 表示缺失标签，而不是 NULL。第一轮入库后数据库里 artist 字段是字符串 `<unknown>`，直接显示到 UI 会很怪。
+  - 修复：`MediaStoreTrackSource` 增加 `String?.clean()`，把 `<unknown>`、空白、null 统一转 null
+  - 回归测试：`MediaStoreStringCleanTest` 4 个用例
+  - 修复后真机确认：`track01|<NULL>|PrimuseTest|3000`
+- 关键技术细节（下次调试直接用）：
+  - **媒体库扫描**：Android 11+ 已废弃 `MEDIA_SCANNER_SCAN_FILE` 广播（`result=0` 无人接收）；`content call --method scan_file` 返回 `STREAM=null` 也无效；**唯一可用的是** `adb shell content call --uri content://media --method scan_volume --arg external_primary`
+  - **数据库检查**：`adb shell run-as com.primuse.lite sqlite3 databases/primuse-lite.db "..."`
+  - **截图**：Git Bash 会把 `/sdcard/x.png` 当本地路径，必须 `export MSYS_NO_PATHCONV=1`
+  - **ADB 连接**：每次 Bash 调用结束后 adb daemon 会随 shell 退出被杀，必须每次重新 `adb start-server && adb connect`
+- 验证方式：
+  - `./gradlew test` → **29 个测试，0 失败**（新增 4 个 `<unknown>` 回归测试）
+  - `./gradlew :app:assembleDebug` → BUILD SUCCESSFUL
+  - 真机日志、数据库内容、通知内容均已逐项核对
+- **新发现的缺口（未修，记入待办）**：
+  1. **删除文件不会从库中移除**——`LocalLibrarySyncer` 只做 upsert，没有清理逻辑。用户删歌后曲库里会留幽灵条目。需要一次「全量扫描后对比库内 ID 集合，删除不存在的」。
+  2. **该设备自动授予权限**，系统弹窗不出现，所以拒绝路径的状态机只有单测覆盖，没有真机验证。
+  3. 横屏下界面可用但未做适配（当前是竖屏设计的居中布局）。
+- 给下一位的提醒：**这台机器会跳过权限弹窗直接授予**，别以为是自己代码写错了。要测拒绝流程必须换一台正常手机或模拟器。
+
 ---
 
 ## P6-01 真机走查清单
