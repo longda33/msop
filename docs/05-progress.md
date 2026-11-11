@@ -259,6 +259,40 @@
 - 遗留问题：重扫按钮是临时入口，UI 定稿后并入正式设置页。
 - 给下一位的提醒：清理逻辑的**安全阀别删**。如果哪天真机上曲库被清空，先看日志里有没有「全量扫描结果为空，跳过幽灵条目清理」——有说明安全阀生效了，问题在扫描侧而不是清理侧。
 
+### 2026-11-11 · P1-05 · SAF 自定义目录（含一次真机抓到的设计缺陷）
+- 做了什么：支持用户通过 SAF 添加媒体库之外的目录，扫描时与 MediaStore 合并。
+- 新增文件：
+  - `saf/SafDirectoryStore.kt` — tree URI 持久化（SharedPreferences）
+  - `saf/SafPaths.kt` — `documentIdToAbsolutePath()`，把 `primary:Music/x.flac` 还原成绝对路径
+  - `saf/SafTrackSource.kt` — BFS 遍历目录树，`ContentResolver.query(childrenUri)` 批量取一层
+  - `scan/CompositeTrackSource.kt` — 串联多个来源
+  - `LocalModule` 改为提供组合来源；`PrimuseApp` / `MainActivity` 加「添加音乐目录」入口
+  - 单测：`SafPathsTest`（7）、`CompositeTrackSourceTest`（5）
+- **真机抓到的设计缺陷（重要）**：
+  - 第一版把 MediaStore 放前面、SAF 放后面。结果 SAF 那份「只有路径、无 album、时长 0」的记录把 MediaStore 的丰富元数据**覆盖**了：
+    ```
+    扫描=1006 写入=1006 库内总数=503
+    track01|<NULL>|0        ← album 丢了，时长变 0
+    ```
+  - 根因：`CompositeTrackSource` 按顺序发出，后写入者覆盖前者，而我把**信息更少**的来源放在了最后。
+  - 修复：顺序改为 **SAF 在前、MediaStore 在后**，并补了 `CompositeTrackSourceTest` 固定这个约束（含一个「顺序反过来会退化」的反向用例）。
+  - 修复后：`track01|PrimuseTest|3000`、`bulk0000|bulk|50`，元数据恢复。
+- 关键技术点：
+  1. **不用 `DocumentFile.listFiles()`** —— 逐层 IPC，几万文件要几分钟。直接对 children URI 做 `query`，一次拿一层全部子项。
+  2. **BFS + 显式队列** —— 深目录递归会爆栈。
+  3. **ID 必须跨通道一致** —— MediaStore 与 SAF 都基于绝对路径哈希，所以同一文件两条通道扫到也只入库一条（实测扫描 1006、入库 503）。
+  4. **`takePersistableUriPermission` 必须紧跟 picker 回调** —— 否则重启后 tree URI 失效。
+- 验证方式：
+  - `./gradlew test` → feature:local **41 个测试全过**
+  - 真机：设置页「添加音乐目录」→ 系统选择器选 Music → 授权弹窗允许 → 自动全量重扫
+  - 持久化：`shared_prefs/primuse_saf_dirs.xml` 确认存了 tree URI；force-stop 重启后全量扫描仍读到 1006 条
+  - 性能：503 个 SAF 文件遍历 878ms（外推 1 万约 18s，目标 40s）
+- 遗留问题：
+  1. **同一目录被重复添加**不会去重（Set 去重了，但用户看不出来）；也没有「移除目录」的入口。
+  2. SAF 来源拿不到标签（artist/album/duration），完全依赖 MediaStore 覆盖。若某文件只在 SAF 里、不在 MediaStore，元数据就是空的——P1-07 用 `MediaMetadataRetriever` 补。
+  3. 横屏下选择器与设置页布局可用但未适配。
+- 给下一位的提醒：**`CompositeTrackSource` 的顺序不是随意的**，`CompositeTrackSourceTest` 里有一条反向用例专门锁这个。要加新来源时先想清楚「谁的元数据更全」，把它放最后。
+
 ---
 
 ## P6-01 真机走查清单

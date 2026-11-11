@@ -1,19 +1,25 @@
 package com.primuse.lite.ui
 
+import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,6 +27,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -43,10 +50,30 @@ private val tabs = listOf(
 )
 
 @Composable
-fun PrimuseApp(onRescan: () -> Unit = {}) {
+fun PrimuseApp(
+    directoryCount: Int = 0,
+    onRescan: () -> Unit = {},
+    onDirectoryPicked: (Uri) -> Unit = {},
+) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
+
+    val context = LocalContext.current
+    val treePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree(),
+    ) { uri ->
+        if (uri != null) {
+            // 必须立刻取持久授权，否则重启后这个 tree URI 就失效了
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
+            onDirectoryPicked(uri)
+        }
+    }
 
     Scaffold(
         bottomBar = {
@@ -96,9 +123,26 @@ fun PrimuseApp(onRescan: () -> Unit = {}) {
                     title = "设置",
                     description = "P4-05 将在这里放扫描目录、OpenList 服务器、缓存清理",
                     action = {
-                        // 临时的功能入口：全量重扫是删除清理与排障的必要手段，
-                        // UI 定稿后并入正式的设置页。
-                        Button(onClick = onRescan) { Text("重新扫描曲库") }
+                        // 临时功能入口：目录管理与重扫是 P1 验收的必要手段，
+                        // UI 定稿后并入正式设置页。
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Text(
+                                text = "已添加 $directoryCount 个自定义目录",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(onClick = { treePicker.launch(null) }) {
+                                    Text("添加音乐目录")
+                                }
+                                Button(onClick = onRescan) {
+                                    Text("重新扫描曲库")
+                                }
+                            }
+                        }
                     },
                 )
             }
