@@ -18,11 +18,17 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,16 +37,19 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.primuse.lite.ui.components.GroupTitle
 import com.primuse.lite.ui.components.ScreenTitle
 import com.primuse.lite.ui.icons.PlayerIcons
 import com.primuse.lite.ui.theme.Dim
 import com.primuse.lite.ui.theme.Palette
+import java.util.Locale
 
 /**
  * 设置。
  *
- * 只放**已经能用**的入口：目录管理、重扫、封面预热。
+ * 只放**已经能用**的入口：目录管理、重扫、封面缓存清理。
  * OpenList 与均衡器还没做，这里明确写「未接入」而不是放一个点了没反应的开关——
  * 假开关比缺功能更让人困惑。
  */
@@ -50,7 +59,7 @@ fun SettingsScreen(
     directoryCount: Int,
     onAddDirectory: () -> Unit,
     onRescan: () -> Unit,
-    onWarmCovers: () -> Unit,
+    vm: SettingsViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
     val versionName = remember {
@@ -58,6 +67,10 @@ fun SettingsScreen(
             context.packageManager.getPackageInfo(context.packageName, 0).versionName
         }.getOrNull() ?: "—"
     }
+    val cache by vm.cache.collectAsStateWithLifecycle()
+    var confirmClear by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) { vm.refreshCache() }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         ScreenTitle(title = "设置")
@@ -94,17 +107,22 @@ fun SettingsScreen(
         SettingRow(
             icon = PlayerIcons.Lyrics,
             title = "歌词",
-            subtitle = "同目录 .lrc 自动读取，逐行滚动",
-            value = "未接入",
+            subtitle = "同名 .lrc 优先，内嵌歌词兜底",
+            value = "已启用",
+            valueColor = Palette.BlueLight,
         )
 
         GroupTitle("存储")
         SettingRow(
             icon = PlayerIcons.Disc,
             title = "封面缓存",
-            subtitle = "按内容哈希落盘，删除曲目后自动回收",
-            value = "查看",
-            onClick = onWarmCovers,
+            subtitle = "按内容哈希落盘；清理后播放时自动重建",
+            value = if (cache.loading) {
+                "统计中…"
+            } else {
+                "${cache.count} 张 · ${formatBytes(cache.bytes)}"
+            },
+            onClick = { confirmClear = true },
         )
 
         GroupTitle("关于")
@@ -122,6 +140,44 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(28.dp))
     }
+
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            containerColor = Palette.Surface,
+            titleContentColor = Palette.TextPrimary,
+            textContentColor = Palette.TextSecondary,
+            title = { Text("清理封面缓存？") },
+            text = {
+                Text(
+                    "将删除 ${cache.count} 张缓存封面（${formatBytes(cache.bytes)}）。" +
+                        "不会删除音频文件，下次播放时会重新生成。",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmClear = false
+                        vm.clearCache()
+                    },
+                ) {
+                    Text("清理", color = Palette.BlueLight)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClear = false }) {
+                    Text("取消", color = Palette.TextSecondary)
+                }
+            },
+        )
+    }
+}
+
+private fun formatBytes(bytes: Long): String = when {
+    bytes >= 1L shl 30 -> String.format(Locale.US, "%.1f GB", bytes / 1024.0 / 1024.0 / 1024.0)
+    bytes >= 1L shl 20 -> String.format(Locale.US, "%.1f MB", bytes / 1024.0 / 1024.0)
+    bytes >= 1L shl 10 -> String.format(Locale.US, "%.0f KB", bytes / 1024.0)
+    else -> "$bytes B"
 }
 
 @Composable

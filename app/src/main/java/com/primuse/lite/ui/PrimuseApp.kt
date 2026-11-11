@@ -87,7 +87,6 @@ fun PrimuseApp(
     directoryCount: Int = 0,
     onRescan: () -> Unit = {},
     onDirectoryPicked: (Uri) -> Unit = {},
-    onWarmCovers: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val navController = rememberNavController()
@@ -188,7 +187,6 @@ fun PrimuseApp(
                         directoryCount = directoryCount,
                         onAddDirectory = { treePicker.launch(null) },
                         onRescan = onRescan,
-                        onWarmCovers = onWarmCovers,
                     )
                 }
             }
