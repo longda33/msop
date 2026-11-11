@@ -105,6 +105,47 @@ class LocalLibrarySyncerTest {
     }
 
     @Test
+    fun `跨页重复的 id 只算一次写入`() = runTest {
+        // SAF 与 MediaStore 会分两页返回同一个文件，去重必须跨页生效
+        val source = FakeSource(listOf(listOf(track("a"), track("b")), listOf(track("b"), track("c"))))
+        val store = FakeStore()
+
+        val stats = LocalLibrarySyncer(source, store).sync()
+
+        assertEquals(4, stats.scanned)
+        assertEquals(3, stats.written)
+        assertEquals(1, stats.deduped)
+        assertEquals(3, store.count())
+    }
+
+    @Test
+    fun `重复记录仍会写入，后出现的元数据覆盖先出现的`() = runTest {
+        // 顺序约定：SAF（只有路径）在前，MediaStore（有 album）在后。
+        // 去重不能把后到的那份丢掉，否则元数据会退化。
+        val lean = track("a").copy(artist = null, album = null, durationMs = 0L)
+        val rich = track("a").copy(artist = "周杰伦", album = "叶惠美", durationMs = 269_000L)
+        val source = FakeSource(listOf(listOf(lean), listOf(rich)))
+        val store = FakeStore()
+
+        val stats = LocalLibrarySyncer(source, store).sync()
+
+        assertEquals(2, stats.scanned)
+        assertEquals(1, stats.written)
+        assertEquals(1, stats.deduped)
+        assertEquals("周杰伦", store.stored["a"]?.artist)
+        assertEquals(269_000L, store.stored["a"]?.durationMs)
+    }
+
+    @Test
+    fun `扫描计数满足 扫描数 = 写入数 + 去重数`() = runTest {
+        val source = FakeSource(listOf(listOf(track("a"), track("a"), track("b"))))
+
+        val stats = LocalLibrarySyncer(source, FakeStore()).sync()
+
+        assertEquals(stats.scanned, stats.written + stats.deduped)
+    }
+
+    @Test
     fun `addedAt 为 0 时补上时间戳`() = runTest {
         val source = FakeSource(listOf(listOf(track("a"))))
         val store = FakeStore()

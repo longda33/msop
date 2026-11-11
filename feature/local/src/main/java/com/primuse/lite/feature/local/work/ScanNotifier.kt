@@ -44,14 +44,20 @@ class ScanNotifier(private val context: Context) {
         notify(notification)
     }
 
-    fun finished(stats: ScanStats) {
+    /**
+     * @param enriched 本次补齐标签的曲目数。0 时用原来的文案，避免通知里出现「补齐标签 0 首」这种噪音。
+     */
+    fun finished(stats: ScanStats, enriched: Int = 0) {
         if (!canNotify()) return
         val seconds = stats.elapsedMs / 1000
+        val text = if (enriched > 0) {
+            context.getString(R.string.scan_done_enriched, stats.scanned, stats.written, enriched, seconds)
+        } else {
+            context.getString(R.string.scan_done, stats.scanned, stats.written, seconds)
+        }
         val notification = base()
             .setContentTitle(context.getString(R.string.scan_title))
-            .setContentText(
-                context.getString(R.string.scan_done, stats.scanned, stats.written, seconds),
-            )
+            .setContentText(text)
             .setOngoing(false)
             .setAutoCancel(true)
             .build()

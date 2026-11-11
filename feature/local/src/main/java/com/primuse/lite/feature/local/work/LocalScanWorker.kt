@@ -6,6 +6,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.primuse.lite.core.common.log.AppLog
+import com.primuse.lite.feature.local.metadata.LocalMetadataEnricher
 import com.primuse.lite.feature.local.scan.LocalLibrarySyncer
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -22,6 +23,7 @@ class LocalScanWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted params: WorkerParameters,
     private val syncer: LocalLibrarySyncer,
+    private val enricher: LocalMetadataEnricher,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
@@ -41,13 +43,21 @@ class LocalScanWorker @AssistedInject constructor(
                 notifier.scanning(scanned, written)
             }
 
-            notifier.finished(stats)
-            AppLog.i("LocalScanWorker 完成 $stats")
+            // 补齐标签放在入库之后，且失败不影响扫描结果：
+            // 标签只是锦上添花，曲库能列出歌才是主任务。
+            val enriched = enrichMetadata()
+
+            // 只有全量扫描会删曲目，也只有它可能留下没人引用的封面
+            if (full) sweepOrphanCovers()
+
+            notifier.finished(stats, enriched)
+            AppLog.i("LocalScanWorker 完成 $stats 补齐=$enriched")
             Result.success(
                 workDataOf(
                     KEY_SCANNED to stats.scanned,
                     KEY_WRITTEN to stats.written,
                     KEY_ELAPSED_MS to stats.elapsedMs,
+                    KEY_ENRICHED to enriched,
                 ),
             )
         } catch (cancellation: CancellationException) {
@@ -64,11 +74,31 @@ class LocalScanWorker @AssistedInject constructor(
         }
     }
 
+    private suspend fun enrichMetadata(): Int = try {
+        enricher.enrichMissing().enriched
+    } catch (cancellation: CancellationException) {
+        throw cancellation
+    } catch (throwable: Throwable) {
+        AppLog.e("元数据补齐失败（不影响扫描结果）", throwable)
+        0
+    }
+
+    private suspend fun sweepOrphanCovers() {
+        try {
+            enricher.sweepOrphanCovers()
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (throwable: Throwable) {
+            AppLog.e("封面缓存清理失败（不影响扫描结果）", throwable)
+        }
+    }
+
     companion object {
         const val KEY_FULL: String = "full"
         const val KEY_SCANNED: String = "scanned"
         const val KEY_WRITTEN: String = "written"
         const val KEY_ELAPSED_MS: String = "elapsedMs"
+        const val KEY_ENRICHED: String = "enriched"
 
         private const val MAX_ATTEMPTS = 3
     }

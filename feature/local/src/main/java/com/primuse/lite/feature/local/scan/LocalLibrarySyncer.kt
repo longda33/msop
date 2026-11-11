@@ -32,21 +32,22 @@ class LocalLibrarySyncer(
 
         var scanned = 0
         var written = 0
-        var deduped = 0
 
-        // 全量扫描时记录本次见到的所有 id，用于事后差集清理
-        val seenIds: MutableSet<String>? = if (full) HashSet() else null
+        // 全程去重集合：同一个文件会被 SAF 与 MediaStore 各返回一次，重复往往跨页、跨来源，
+        // 只看单页会把去重计数永远算成 0。全量扫描时它同时充当幽灵条目清理的白名单。
+        val seenIds = HashSet<String>()
 
         source.scan(since = since, pageSize = pageSize) { page ->
             scanned += page.size
 
-            // 批内去重：同一路径在极端情况下可能被返回两次
+            // 页内也要折叠：同一 id 在一页里出现两次时没必要 upsert 两次。
+            // 用 LinkedHashMap 而非 Set，是为了让**后出现的那条**覆盖前面的——
+            // 后出现的来源元数据更全（见 CompositeTrackSource 的顺序约定）。
             val unique = LinkedHashMap<String, Track>(page.size)
             for (track in page) {
-                if (unique.put(track.id, track) != null) deduped++
+                seenIds.add(track.id)
+                unique[track.id] = track
             }
-
-            seenIds?.addAll(unique.keys)
 
             if (unique.isNotEmpty()) {
                 val stampedAt = now()
@@ -54,13 +55,14 @@ class LocalLibrarySyncer(
                     if (track.addedAt == 0L) track.copy(addedAt = stampedAt) else track
                 }
                 store.upsertAll(ready)
-                written += ready.size
             }
 
+            // 按全程去重后的条数计，而不是按页累加，否则同一首会被算多次
+            written = seenIds.size
             onProgress?.invoke(scanned, written)
         }
 
-        val deleted = if (seenIds != null) {
+        val deleted = if (full) {
             removeMissing(seenIds, scanned)
         } else {
             0
@@ -70,7 +72,7 @@ class LocalLibrarySyncer(
             scanned = scanned,
             written = written,
             deleted = deleted,
-            deduped = deduped,
+            deduped = scanned - written,
             elapsedMs = System.currentTimeMillis() - startedAt,
         )
         AppLog.i(

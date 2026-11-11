@@ -1,7 +1,15 @@
 package com.primuse.lite.feature.local.di
 
 import android.content.Context
+import com.primuse.lite.core.common.saf.SafRootProvider
 import com.primuse.lite.core.database.dao.TrackDao
+import com.primuse.lite.feature.local.metadata.AndroidMetadataReader
+import com.primuse.lite.feature.local.metadata.CoverCache
+import com.primuse.lite.feature.local.metadata.CoverProvider
+import com.primuse.lite.feature.local.metadata.LocalMetadataEnricher
+import com.primuse.lite.feature.local.metadata.MetadataReader
+import com.primuse.lite.feature.local.metadata.MetadataStore
+import com.primuse.lite.feature.local.metadata.RoomMetadataStore
 import com.primuse.lite.feature.local.saf.PrefsSafDirectoryStore
 import com.primuse.lite.feature.local.saf.SafDirectoryStore
 import com.primuse.lite.feature.local.saf.SafTrackSource
@@ -16,6 +24,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import java.io.File
 import javax.inject.Singleton
 
 @Module
@@ -26,6 +35,12 @@ object LocalModule {
     @Singleton
     fun provideSafDirectoryStore(@ApplicationContext context: Context): SafDirectoryStore =
         PrefsSafDirectoryStore(context)
+
+    /** 把 SAF 目录树暴露给别的 feature（歌词要顺着树找同名 .lrc）。 */
+    @Provides
+    @Singleton
+    fun provideSafRootProvider(store: SafDirectoryStore): SafRootProvider =
+        SafRootProvider { store.treeUris() }
 
     /**
      * 扫描流水线：SAF 自定义目录在前，MediaStore 在后。
@@ -55,4 +70,35 @@ object LocalModule {
         source: TrackPageSource,
         store: LocalTrackStore,
     ): LocalLibrarySyncer = LocalLibrarySyncer(source, store)
+
+    @Provides
+    @Singleton
+    fun provideMetadataReader(@ApplicationContext context: Context): MetadataReader =
+        AndroidMetadataReader(context)
+
+    @Provides
+    @Singleton
+    fun provideCoverCache(@ApplicationContext context: Context): CoverCache =
+        CoverCache(File(context.filesDir, CoverCache.DIR_NAME))
+
+    @Provides
+    @Singleton
+    fun provideMetadataStore(dao: TrackDao): MetadataStore = RoomMetadataStore(dao)
+
+    @Provides
+    @Singleton
+    fun provideCoverProvider(
+        store: MetadataStore,
+        reader: MetadataReader,
+        cache: CoverCache,
+    ): CoverProvider = CoverProvider(store, reader, cache)
+
+    @Provides
+    @Singleton
+    fun provideLocalMetadataEnricher(
+        store: MetadataStore,
+        reader: MetadataReader,
+        covers: CoverProvider,
+        cache: CoverCache,
+    ): LocalMetadataEnricher = LocalMetadataEnricher(store, reader, covers, cache)
 }

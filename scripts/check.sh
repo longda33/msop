@@ -73,11 +73,15 @@ else
 fi
 
 echo "== 6. UI 代码状态 =="
-ui=$(find feature -path '*/ui/*' -name '*.kt' 2>/dev/null | wc -l)
+ui=$(find app/src/main -path '*/ui/*' -name '*.kt' 2>/dev/null | wc -l)
+feature_ui=$(find feature -path '*/ui/*' -name '*.kt' 2>/dev/null | wc -l)
 if [ "$ui" -gt 0 ]; then
-    echo "  [WARN] feature 下已有 $ui 个 ui 文件——确认 docs/06 的 Q1-Q4 是否已定稿"
+    ok "app/ui 下已有 $ui 个界面文件（UI 已落地，见 docs/07 与 preview/index.html）"
 else
-    ok "feature 下无界面代码（符合 UI 未定状态）"
+    ok "app/ui 下无界面代码（UI 未落地）"
+fi
+if [ "$feature_ui" -gt 0 ]; then
+    echo "  [INFO] feature 下另有 $feature_ui 个 ui 文件——确认它们与 app/ui 不重复"
 fi
 
 echo

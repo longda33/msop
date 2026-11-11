@@ -10,11 +10,11 @@
 如果你只想看六条：
 
 1. **这是什么**：安卓音乐播放器，Kotlin + Compose + Media3，只读本机文件 + 对接公网 OpenList，自用不上架。
-2. **做到哪了**：Gradle 多模块骨架写完（12 模块）；**2026-11-11 首次 `assembleDebug` 已在本机验证通过**（COMMAND 见 §1 与 `docs/05-progress.md`）。环境旧述「生成环境无 JDK/SDK」已过时——本机具 Microsoft OpenJDK 21 与 Android SDK。注意：**该目录不是 git 仓库**（无历史可恢复；`.git` 缺失）。
-3. **立刻该做什么**：`scripts/check.sh` 与首次 `./gradlew :app:assembleDebug` **均已于 2026-11-11 跑通**（§1 有命令与结果）。下一步按 §8 推进 **A 本地数据线 P1-02 → P1-03 → P1-04 → P1-05 → P1-06 → P1-07 → P1-08**（这三条线彼此独立、与 UI 无关），然后 B 播放内核 / C 远程音源。UI 相关任务（P1-09、P2-05、P4-*、P5-02）**仍挂起**，等 `docs/06` §8 的 Q1–Q4 定稿。
-4. **什么不能碰**：`feature/*/ui/` 下**一行代码都不要写**——UI 还没确认（见 `docs/06` §8 的 Q1–Q4）。
-5. **可以并行做什么**：P1 扫描入库、P2 播放内核、P3 Subsonic 客户端，这三块与 UI 无关。
-6. **最容易踩的坑**：AGP 9 内置 Kotlin，**不要**应用 `org.jetbrains.kotlin.android`；URL 拼接**不要**用字符串。
+2. **做到哪了**：Gradle 多模块骨架（12 模块）、本地扫描入库、播放内核、UI、歌单、歌词都已完成并真机验收。本机具 Microsoft OpenJDK 21 + Android SDK，设备可通过 `adb connect 127.0.0.1:5555` 或 `-s emulator-5554` 连接。**该目录是 git 仓库**（2026-11-11 首个 commit，之后有若干未提交改动）。
+3. **立刻该做什么**：唯一的大块是 **C 远程音源 P3-01**，但它**被真实 OpenList 地址与账号阻塞**——没有服务器就不要写 Subsonic 客户端。可先做的不依赖远程的任务：P5-03 均衡器、P5-05 后台保活、P4-05 缓存清理入口、P6-02 release 构建、P6-03 使用说明。
+4. **什么能碰**：`app/src/main/java/com/primuse/lite/ui/` 是正式 UI，可以直接改。`feature/*/ui/` 仍然空着——UI 没有按模块拆，全部集中在 app 模块（原因见 §5 的说明）。
+5. **可以并行做什么**：P5 打磨（均衡器/保活）、P4-05 缓存清理、P6 打包文档，这三块与远程音源无关。
+6. **最容易踩的坑**：AGP 9 内置 Kotlin，**不要**应用 `org.jetbrains.kotlin.android`；URL 拼接**不要**用字符串；Room 迁移**不要**开 destructive。`ffmpeg -metadata lyrics=` 写的是 `TXXX:USLT`，不是真正的 `USLT` 帧。
 
 ## 1. 项目是什么
 
@@ -26,17 +26,17 @@
 
 | 项 | 值 |
 |---|---|
-| 阶段 | **P0 全部完成 · P1 进行中：P1-01/02/03/05/08 完成，P1-04 部分完成** |
-| 代码量 | Kotlin 源码 **46 个**（单测 7 个文件 / 45 个用例）：app 5、core:common 3、core:database 8、core:model 2、feature:local 21、其余 7 个模块各 1 占位 |
-| 测试 | ✅ `./gradlew test` → **45 个测试，0 失败**（core:database 4 + feature:local 41） |
-| 真机验证 | ✅ 已在 **OPPO PJB110 / Android 12 (API 32)** 上验证：三 Tab、日志、权限门禁、扫描入库、通知。性能：1003 首全量 376ms、增量 35ms |
-| 构建状态 | ✅ **已验证**：`./gradlew tasks` 与 `./gradlew :app:assembleDebug` 均 **BUILD SUCCESSFUL**（首次约 1h4m，增量约 1m；APK 12 MB）。本机具 Microsoft OpenJDK 21 + Android SDK（android-37 / build-tools 37.0.0）。⚠️ **无 adb 设备、无模拟器**，装机启动与界面验收仍未验证 |
-| 版本控制 | ✅ 已 `git init` 并提交首个 commit（2026-11-11），此前无历史 |
-| UI 状态 | ⚠️ **未确认**，`docs/06` §8 的 Q1–Q4 全待定，**禁止写界面代码** |
+| 阶段 | **P0 / P1 / P2 / P4 完成 · P5 本地部分完成（P5-01 远程待 P3）· P3 被 OpenList 服务器阻塞** |
+| 代码量 | Kotlin 源码 **88 个**（main 74 + test 14；单测 14 个文件 / 114 个用例） |
+| 测试 | ✅ `.\gradlew.bat test` → **114 个测试，0 失败**（core:database 4 + feature:local 82 + feature:lyrics 28；播放层靠真机验收，未加单测） |
+| 真机验证 | ✅ 已在 **OPPO PJB110 / Android 12 (API 32)** 上验证：三 Tab、日志、权限门禁、扫描入库、通知、SAF 目录、幽灵清理、标签补齐、封面落盘与回收、**MP3/WAV/FLAC 播放、后台播放、通知栏与媒体键控制、单曲循环与随机、耳机拔出暂停、来电打断与挂断续播**；**歌单持久化（含 v1→v2 迁移）、播放页模糊背景与滑动收起、歌词高亮/跳转/手动回中**。性能：1003 首全量 376ms、增量 35ms；1006 条双通道去重后 503 首 635ms；30 首封面预热 400ms |
+| 构建状态 | ✅ **已验证**：`./gradlew tasks`、`:app:assembleDebug`、`installDebug` 全部成功（增量约 1m；APK 19.3 MB）。本机具 Microsoft OpenJDK 21 + Android SDK（android-37 / build-tools 37.0.0）。真机连接方式见 §8「真机调试速查」 |
+| 版本控制 | ✅ 是 git 仓库（2026-11-11 首个 commit）；UI、歌词、歌单与播放页手势为最近一轮改动，提交状态见 `git status` |
+| UI 状态 | ✅ **已真机验收**（2026-11-11，emulator-5554 / PJB110 / 450×800dp）：三 Tab、五种列表视图、专辑详情、播放页（封面/歌词双态）、队列、搜索、设置全部走通；歌单新建/改名/加歌/删歌并在重启后保持；播放页模糊封面、上滑队列、下滑收起；歌词高亮与点击 seek。APK 19.3 MB |
 | 下一步 | 见 §8 |
 | 本机音乐位置 | 默认 MediaStore 标准目录，用户可追加 SAF 自定义目录 |
 | OpenList 部署 | 公网域名 + HTTPS，可能有反代子路径、可能自签证书，两种挂法都要支持 |
-| 最后更新 | 2026-11-11（首次构建验证日） |
+| 最后更新 | 2026-11-11（P4-03 / P4-04 / P5-01 本地部分 / P5-02 完成并真机验收） |
 
 **每次完成任务后必须更新三处**：本节、`TASKS.md` 对应勾选框、`docs/05-progress.md` 追加一条。
 
@@ -71,18 +71,18 @@
 ## 5. 模块结构（已建好，按此填充）
 
 ```
-:app                      单 Activity 壳、导航图、DI 装配
+:app                      单 Activity 壳、导航图、DI 装配、全部 UI    ✅ 已实现
 :core:model               Track / Album / Artist / SourceType     ✅ 已实现
-:core:common              工具、常量、Result 封装                  ⬜ 仅占位
-:core:database            Room 实体、DAO、迁移                     ⬜ 仅占位
+:core:common              工具、日志、SAF 授权根目录                 ✅ 已实现
+:core:database            Room 实体、DAO、v1→v2 迁移               ✅ 已实现
 :core:network             Subsonic 客户端、WebDAV 兜底、鉴权        ⬜ 仅占位
 :core:datastore           设置项（服务器地址、账号、扫描目录）       ⬜ 仅占位
-:feature:local            MediaStore + SAF 扫描入库                ⬜ 仅占位
+:feature:local            MediaStore + SAF 扫描入库                ✅ 已实现
 :feature:remote           OpenList 音源                           ⬜ 仅占位
-:feature:player           Media3 服务、播放控制、通知               ⬜ 仅占位
-:feature:library          列表页（UI 未定，暂不实现）               ⬜ 仅占位
-:feature:lyrics           LRC 解析与滚动                          ⬜ 仅占位
-:feature:settings         设置页（UI 未定，暂不实现）               ⬜ 仅占位
+:feature:player           ExoPlayer + MediaSessionService         ✅ 播放/通知/队列已实现
+:feature:library          列表页（UI 已落在 app/ui，本模块暂空）      ⬜ 仅占位
+:feature:lyrics           LRC + 内嵌歌词解析                       ✅ 已实现
+:feature:settings         设置页（UI 已落在 app/ui，本模块暂空）      ⬜ 仅占位
 ```
 
 依赖方向：`feature:* → core:*`，**feature 之间不互相依赖**，共享逻辑下沉到 core。
@@ -98,13 +98,13 @@ gradlew / gradlew.bat      精简版启动脚本（非官方完整版，见 BUIL
 gradle.properties          jvmargs、parallel、caching、useAndroidX
 local.properties.example   复制成 local.properties 后填 sdk.dir
 app/build.gradle.kts       Compose + Hilt + KSP + 11 个 project 依赖
-app/src/main/              单 Activity + 三 Tab 骨架（PrimuseApp.kt）+ 主题 + 清单
+app/src/main/              单 Activity + 全部 Compose UI + 主题 + 清单
 core/model/Track.kt        Track / Album / Artist / SourceType + toDurationLabel
 scripts/check.sh           完整性自检，不需要 JDK 就能跑
 每个模块的 ModuleMarker.kt  占位对象，验证依赖图接通，有真实实现后可删
 ```
 
-**`app/src/main/java/.../ui/PrimuseApp.kt` 是骨架占位**，三个 Tab 都是空文案。它不是最终 UI，UI 定稿后整体重写。
+**`app/src/main/java/.../ui/` 是正式 UI，不是占位**。三 Tab、五种列表视图、播放页、队列、搜索、设置、歌单全部已落地并真机验收；改 UI 直接从这里改。
 
 ## 7. 数据契约（与代码一致）
 
@@ -123,7 +123,7 @@ data class Track(
     val trackNo: Int? = null,
     val discNo: Int? = null,
     val year: Int? = null,
-    val coverUri: String? = null,  // 本地：封面缓存路径；远程：getCoverArt URL
+    val coverUri: String? = null,  // 本地：file:// 封面缓存路径（按内容哈希命名，可跨曲目复用）；远程：getCoverArt URL
     val sizeBytes: Long? = null,
     val mimeType: String? = null,
     val localPath: String? = null, // 仅 LOCAL
@@ -141,7 +141,7 @@ data class Artist(val id: String, val name: String, val albumCount: Int, val tra
 
 ### 已完成的地基（不要再重复做）
 
-骨架、构建、`gradlew tasks`、Room 数据层、MediaStore 扫描、Hilt + WorkManager 接线、权限门禁、启动触发扫描——全部已落地，**并且已在真机（OPPO PJB110 / Android 12）上验证通过**。
+骨架、构建、`gradlew tasks`、Room 数据层（含 v1→v2 歌单迁移）、MediaStore 扫描、SAF 目录、双通道去重、标签补齐、封面落盘与回收、Hilt + WorkManager 接线、权限门禁、启动触发扫描、全部 UI、歌单、播放页手势与模糊背景、歌词（旁挂 + 内嵌）——全部已落地，**并且已在真机（OPPO PJB110 / Android 12）上验证通过**。
 
 ### 真机调试速查（这些坑都踩过了）
 
@@ -161,6 +161,23 @@ adb shell content call --uri content://media --method scan_volume --arg external
 
 # 直接看数据库
 adb shell run-as com.primuse.lite sqlite3 databases/primuse-lite.db "SELECT * FROM tracks LIMIT 5;"
+
+# 取二进制文件（封面等）必须用 exec-out：shell cat 会把 \n 翻成 \r\n，字节全错
+adb exec-out run-as com.primuse.lite cat files/covers/<hash>.jpg > cover.jpg
+
+# 点 UI 用 uiautomator 拿真实坐标，别照截图猜（这台机器是横屏 1280x720）
+adb shell uiautomator dump /sdcard/ui.xml && adb pull /sdcard/ui.xml
+
+# 看播放状态：state=3 播放 / 2 暂停，metadata 就是通知栏显示的内容
+adb shell dumpsys media_session | grep -E "state=PlaybackState|metadata:"
+
+# 模拟锁屏/耳机按键（这台 ROM 的 cmd media_session 要包名，用 keyevent 更省事）
+adb shell input keyevent 85   # 播放/暂停
+adb shell input keyevent 87   # 下一首
+
+# 模拟耳机拔出：AUDIO_BECOMING_NOISY 是**保护广播**，shell 发会被 SecurityException 拒掉
+# 注意 action 是 android.media.*，不是 android.intent.action.*（写错会静默无效）
+adb root && adb shell am broadcast -a android.media.AUDIO_BECOMING_NOISY && adb unroot
 ```
 
 **⚠️ 这台设备会自动授予权限**，系统弹窗不会出现。想测拒绝流程必须换设备。
@@ -169,23 +186,72 @@ adb shell run-as com.primuse.lite sqlite3 databases/primuse-lite.db "SELECT * FR
 
 | 线 | 任务 | 状态 |
 |---|---|---|
-| **A 本地数据** | P1-02 ✅ → P1-03 ✅ → P1-04 ⚠️ → P1-05 ✅ → **P1-06 / P1-07（下一个）** → P1-08 ✅ | 双通道扫描与去重已跑通，缺封面提取与标签补齐 |
-| **B 播放内核** | P2-01 → P2-02 → P2-03 → P2-04 | 未开工 |
-| **C 远程音源** | P3-01 → P3-02 → P3-03 → P3-04 → P3-05 → P3-06 | 未开工 |
+| **A 本地数据** | P1-02 ✅ → P1-03 ✅ → P1-04 ⚠️ → P1-05 ✅ → P1-06 ✅ → P1-07 ✅（数据侧）→ P1-08 ✅ → P1-09 ✅ | **收工**，只剩 P1-04 拒绝路径（本机测不了） |
+| **B 播放内核** | P2-01 ✅ → P2-02 ✅ → P2-03 ⚠️（拖拽 UI 待做）→ P2-04 ✅ → P2-05 ✅ | 播放/通知/后台/队列/模式/焦点/拔出耳机/播放页已跑通；只剩 P2-03 的队列拖拽排序 |
+| **C 远程音源** | **P3-01（被阻塞）** → P3-02 → P3-03 → P3-04 → P3-05 → P3-06 → P3-07 | **未开工**。必须先拿到真实 OpenList 地址与账号并实测响应 |
+| **D 打磨** | P5-03 均衡器 → P5-05 保活 → P4-05 缓存清理 → P6-02 release → P6-03 使用说明 | 可立即开工，不依赖远程 |
 
-**推荐顺序**：P1-07（封面与标签提取，SAF 来源目前元数据为空）→ P1-06（去重收尾）→ P2（播放内核）→ C（远程音源）。
-C 的第一步 P3-01 必须实测 OpenList 的真实响应，不能照着文档写。
+**推荐顺序**：C 被服务器阻塞，先做 D 线；拿到 OpenList 凭据后立刻回到 C 的第一步 P3-01。
+P3-01 必须实测 OpenList 的真实响应，不能照着文档写。
 
 ### 已知缺口（真机测试发现的，尚未修）
 
 1. **权限拒绝路径未真机验证** —— 设备自动授权，只有单测覆盖。
-2. **横屏未适配** —— 当前界面是竖屏布局，横屏可用但不好看。
-3. **SAF 来源元数据为空**（P1-07）—— SAF 拿不到标签，只在 SAF 里出现的文件没有 artist/album/时长。
-4. **没有「移除目录」入口** —— 只能添加，不能删。
+2. **横屏未专门适配** —— 当前界面是竖屏布局，横屏可用但没走查（模拟器 900×1600 竖屏）。
+3. **没有「移除目录」入口** —— 只能添加，不能删。
+4. **封面缓存没有容量上限** —— 只有「全量扫描后清理孤儿文件」，没有按体积淘汰；几千张专辑会持续增长。设置页的「缓存大小 / 清理」入口（P4-05）补，`CoverCache.clear()` / `sizeBytes()` 已就绪。
+5. **标签被删除时同步不过来** —— 扫描给 null，`mergedWithExisting` 会保留旧值。代价换来的是「重扫不丢补出来的数据」，见 `docs/05`。
+6. **M4A / OGG 的内嵌封面与标签未实测** —— MP3 的 `USLT` 已在设备上验证，FLAC 的 Vorbis Comment 只有 JVM 单测；P6-01 走查时补。
+7. **队列拖拽排序未做** —— `moveInQueue` 已就位，UI 没接（P2-03 剩余部分）。
 
-### UI 相关的任务（P1-09、P2-05、P4-*、P5-02）全部挂起
+### UI 已落地并真机验收（2026-11-11）
 
-等用户定 `docs/06` §8 的 Q1–Q4，尤其是 Q4（像素级复刻 / 同设计语言 / 完全自定义），这条决定工作量差 2 倍。
+界面代码在 **`app/src/main/java/com/primuse/lite/ui/`**，共 16 个文件：
+
+```
+PrimuseApp.kt          三 Tab 外壳 + 迷你播放条 + 播放页浮层 + 队列
+theme/Theme.kt         色板 / 字体 / 尺寸令牌（深色，Primuse 配色）
+icons/PlayerIcons.kt   10 个自绘播放图标（不引 material-icons-extended）
+components/TrackRow.kt 歌曲行、封面、空态、标题、文件信息弹窗
+components/MiniPlayer.kt 胶囊播放条 + 底部进度线
+library/LibraryScreen.kt 五种视图（歌曲/最近/专辑/艺术家/文件夹）
+library/AlbumDetail.kt   专辑详情
+library/LibraryViewModel.kt 曲库 + 播放共享状态
+player/PlayerSheet.kt    全屏播放页（封面/歌词两态 + 模糊背景 + 滑动手势）
+player/QueueSheet.kt     队列面板
+player/LyricsViewModel.kt 歌词加载状态
+playlist/PlaylistScreen.kt  歌单列表 / 详情 / 选歌 / 重命名
+playlist/PlaylistViewModel.kt 歌单 CRUD
+search/SearchScreen.kt   搜索
+settings/SettingsScreen.kt 设置
+permission/AudioPermissionGate.kt 权限门禁
+```
+
+**为什么没按模块拆到 `feature:library` / `feature:settings`**：那几个模块目前是纯 Kotlin 库，没有 Compose / Hilt / Coil 依赖，为 UI 单独配置一遍会引入跨模块 KSP 风险。当前是自用 App，先在 app 模块跑通；等 UI 稳定、需要复用时再下沉。
+
+**验收结果**（2026-11-11，emulator-5554 / PJB110 / 900×1600 @320dpi = 450×800dp）：
+
+| # | 项 | 结果 |
+|---|---|---|
+| 1 | 三 Tab 切换 | ✅ 选中胶囊、图标变蓝、内容正确 |
+| 2 | 点歌 → 迷你条 → 播放页 | ✅ `state=3` 播放中，胶囊条带封面/标题/暂停键/进度线 |
+| 3 | 拖动进度条 seek | ✅ 拖到 66.7% → `position=100008ms`（曲长 150s），误差 < 1s |
+| 4 | 播放页封面/歌词切换 | ✅ 两种形态切换正常；模糊封面背景与暗色渐变生效 |
+| 5 | 队列面板 | ✅ 505 首，当前曲高亮逻辑正确 |
+| 6 | 搜索过滤 | ✅ 输入 FLAC 即时出 1 条，当前播放行蓝色高亮 + 音柱 |
+| 7 | 专辑网格 → 详情 → 播放全部 | ✅ 2 列等宽、真实封面能加载（Coil 读 `file://` 正常） |
+| 8 | 设置页 | ✅ 分组、目录数、版本号正确 |
+| 9 | 歌单持久化 | ✅ 新建 `TestMix` → 加 2 首 → 移除 1 首 → 改名 `Mix2`；强停重启后仍在，505 首歌未被迁移清空 |
+| 10 | 播放页手势 | ✅ 封面区上滑打开队列、下滑收起；歌词页内滚动不误触发收起 |
+| 11 | 内嵌同步歌词 | ✅ 无 `.lrc` 的 `USLT` 文件显示 6 行；5 秒时第一行高亮；点第五行 seek 到 42.7s 且高亮跟随 |
+| 12 | 内嵌静态歌词 | ✅ 无时间标签时显示「歌词未同步 · 仅展示全文」，四行静态文本，无高亮、不 seek |
+| 13 | 旁挂歌词优先 | ✅ 同名 `.lrc` 与内嵌歌词同时存在时，显示 `.lrc` 内容，内嵌内容不出现 |
+
+**验收中发现并修掉的两个问题**：
+1. 播放页封面无图时占位图标按 36% 缩放，在 300dp 封面上变成 100dp 的大圆环 → 改成固定 56dp。
+2. 播放页缺 `navigationBarsPadding()`，全面屏手势条会压住底部入口 → 已补。
+
+**还没做的**（不算 bug，属后续任务）：队列拖拽排序、远程歌词（待 P3）、横屏专门适配。
 
 ## 9. 如何验证
 
@@ -224,7 +290,9 @@ adb logcat -s PrimuseLite:V AndroidRuntime:E
 | D9 | 本机扫描默认 MediaStore，SAF 补充 | MediaStore 快 10 倍 | docs/02 §9 |
 | D10 | 公网流播加「仅 Wi-Fi 预加载」 | 蜂窝下自动缓存烧流量 | docs/02 §8 |
 | D12 | 反代子路径两种形态都支持，靠 URL 规范化通吃 | 不依赖用户预判部署形态 | docs/03 §1.2 |
-| — | **UI 全部未定** | 用户明确要求确定前不写界面代码 | docs/06 §8 |
+| D13 | UI 走「双空间」：浏览浅色密集，播放恒定深色 + 封面主色渐晕 | 大封面在深底上对比最强，OLED 省电，切歌换氛围色成本极低 | docs/07 §3.1 |
+| D14 | 播放页用自定义全屏浮层，不用 `ModalBottomSheet` | 避免与左右滑切歌抢手势，且不污染返回栈 | docs/07 §2 Q3 |
+| — | **UI 已落地在 app 模块**，不拆到 feature | 那几个模块没有 Compose/Hilt 依赖，单独配置风险高；自用 App 优先跑通 | `app/ui/` |
 
 ## 11. 禁止事项
 
@@ -246,7 +314,7 @@ adb logcat -s PrimuseLite:V AndroidRuntime:E
 | AGP 9 内置 Kotlin | 🟡 存疑 | 出问题按 §4.2 关闭内置 Kotlin（AGP 10 起不可关） |
 | compileSdk 37 | ✅ **已确认** | 本机 SDK 含 `platforms/android-37.0` + `build-tools/37.0.0` |
 | OpenList Subsonic 接口完整度 | 🔴 未知 | 无公开文档，P3-01 必须实测 |
-| Primuse UI 还原度 | 🟡 已评估 | 骨架层 88–92%，播放层 78–85%，特效层 30–50%，详见 `docs/06` §9 |
+| Primuse UI 还原度 | 🟡 已评估 | 骨架层 88–92%，播放层 78–85%，特效层 30–50%，详见 `docs/06` §9；落地方案见 `docs/07` |
 
 ## 13. 文档索引
 
@@ -260,5 +328,7 @@ adb logcat -s PrimuseLite:V AndroidRuntime:E
 | `docs/03-openlist-api.md` | 做 OpenList 对接时：Subsonic 接口、URL 规范化、WebDAV 兜底 |
 | `docs/04-reference-index.md` | 不知道某功能怎么实现时：该抄哪个仓库的哪个文件 |
 | `docs/05-progress.md` | 想知道之前做过什么、踩过什么坑、下一步提醒 |
-| `docs/06-ui-spec.md` | UI 草案与还原度评估。**当前未定稿，只作讨论用** |
+| `docs/06-ui-spec.md` | UI 草案与还原度评估。**已被 `docs/07` 取代**，仅作讨论存档 |
+| `docs/07-ui-design.md` | **UI 定稿提案**：Q1–Q4 决策、色彩/字体/间距令牌、9 屏规格、交互、横屏适配、Compose 落地映射 |
+| `docs/design/prototype.html` | 可交互高保真原型（浏览器打开，9 屏可点，支持 `#player` 这类锚点直达） |
 | `docs/reference/primuse-ios/` | Primuse 官方截图 4 张，评估视觉还原时对照用 |

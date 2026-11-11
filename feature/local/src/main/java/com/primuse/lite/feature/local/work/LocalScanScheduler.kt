@@ -17,8 +17,12 @@ import javax.inject.Singleton
 /**
  * 扫描任务的唯一入口。UI 与设置页只调这里，不直接碰 WorkManager。
  *
- * 用 `enqueueUniqueWork + KEEP`：重复触发时不会叠加多个扫描任务，
- * 也不会打断正在跑的那个。
+ * 冲突策略分两种：
+ * - 自动触发的增量扫描用 `KEEP`：重复触发时不叠加，也不打断正在跑的那个
+ * - 用户手动触发的全量扫描用 `REPLACE`：用户明确要求重扫，若此时正好有增量在跑，
+ *   用 `KEEP` 会把这次请求**静默丢弃**，用户点了按钮却什么都没发生
+ *
+ * 打断正在跑的扫描是安全的：同步按确定性 ID upsert，被杀掉重跑没有副作用。
  */
 @Singleton
 class LocalScanScheduler @Inject constructor(
@@ -37,10 +41,13 @@ class LocalScanScheduler @Inject constructor(
             .build()
 
         WorkManager.getInstance(context)
-            .enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.KEEP, request)
+            .enqueueUniqueWork(WORK_NAME, policyFor(full), request)
 
         AppLog.i("已排入扫描任务 full=$full")
     }
+
+    private fun policyFor(full: Boolean): ExistingWorkPolicy =
+        if (full) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP
 
     fun cancel() {
         WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)

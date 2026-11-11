@@ -3,6 +3,7 @@ package com.primuse.lite.core.database.di
 import android.content.Context
 import androidx.room.Room
 import com.primuse.lite.core.database.PrimuseDatabase
+import com.primuse.lite.core.database.dao.PlaylistDao
 import com.primuse.lite.core.database.dao.TrackDao
 import dagger.Module
 import dagger.Provides
@@ -19,11 +20,14 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): PrimuseDatabase =
         Room.databaseBuilder(context, PrimuseDatabase::class.java, PrimuseDatabase.NAME)
-            // 自用工具，尚未发布任何版本；schema 变更时直接重建，不写迁移。
-            // 一旦有真实用户数据，这里必须改成 addMigrations(...)。
+            .addMigrations(PrimuseDatabase.MIGRATION_1_2)
+            // 兜底：万一未来漏写迁移，宁可重建也不能启动崩溃。
             .fallbackToDestructiveMigration(dropAllTables = true)
             .build()
 
     @Provides
     fun provideTrackDao(database: PrimuseDatabase): TrackDao = database.trackDao()
+
+    @Provides
+    fun providePlaylistDao(database: PrimuseDatabase): PlaylistDao = database.playlistDao()
 }

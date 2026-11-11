@@ -2,6 +2,7 @@ package com.primuse.lite.feature.local.scan
 
 import com.primuse.lite.core.database.dao.TrackDao
 import com.primuse.lite.core.database.mapper.toEntity
+import com.primuse.lite.core.database.mapper.toTrack
 import com.primuse.lite.core.model.SourceType
 import com.primuse.lite.core.model.Track
 
@@ -21,9 +22,22 @@ class RoomLocalTrackStore(
 
     override suspend fun latestModified(): Long? = dao.latestModified(SourceType.LOCAL)
 
+    /**
+     * 入库前先与库里已有记录合并。
+     *
+     * 扫描器看不到封面缓存路径，也读不出 SAF 文件的标签；整行 upsert 会把这些字段
+     * 抹成 null。合并逻辑见 [mergedWithExisting]。
+     *
+     * 每页最多 500 条，`IN (:ids)` 的参数个数不会触到 SQLite 的绑定变量上限。
+     */
     override suspend fun upsertAll(tracks: List<Track>) {
         if (tracks.isEmpty()) return
-        dao.upsertAll(tracks.map { it.toEntity() })
+        val existing = dao.findByIds(tracks.map { it.id }).associateBy { it.id }
+        dao.upsertAll(
+            tracks.map { track ->
+                track.mergedWithExisting(existing[track.id]?.toTrack()).toEntity()
+            },
+        )
     }
 
     override suspend fun deleteByIds(ids: List<String>) {

@@ -293,6 +293,184 @@
   3. 横屏下选择器与设置页布局可用但未适配。
 - 给下一位的提醒：**`CompositeTrackSource` 的顺序不是随意的**，`CompositeTrackSourceTest` 里有一条反向用例专门锁这个。要加新来源时先想清楚「谁的元数据更全」，把它放最后。
 
+### 2026-11-11 · P1-06 去重收尾 · P1-07 元数据与封面
+
+- 做了什么：
+  1. **P1-06**：去重计数从「批内」改成「全程」。原来同一文件被 SAF 与 MediaStore 各返回一次时落在不同页/不同来源，`deduped` 永远是 0，日志看起来像「扫描 1006 写入 1006」，实际库里只有 503 条。
+  2. **P1-07**：新增 `feature/local/metadata/`，用 `MediaMetadataRetriever` 补标签、按内容哈希把内嵌封面落盘、`coverUri` 回写数据库；全量扫描后回收没人引用的封面。
+- 新增文件：`metadata/TrackMetadata.kt`、`MetadataValues.kt`、`MetadataMerge.kt`、`MetadataReader.kt`、`CoverCache.kt`、`MetadataStore.kt`、`RoomMetadataStore.kt`、`CoverProvider.kt`、`LocalMetadataEnricher.kt`、`scan/ScanMerge.kt`
+- 改动的文件：`LocalLibrarySyncer`（全程去重 + written 语义）、`RoomLocalTrackStore`（入库前合并）、`TrackDao`（4 个查询）、`LocalScanWorker`（扫描后补齐 + 回收）、`LocalScanScheduler`（全量用 REPLACE）、`ScanNotifier` + `strings.xml`、`LocalModule`（装配）、`PrimuseApp` / `MainActivity`（临时「预热封面」入口）
+
+- **真机抓到的真 bug（重要）**：重扫会把封面和 SAF 标签一起抹掉。
+  - 现象：预热封面后 `coverUri` 有值，点「重新扫描曲库」→ 504 行全部变回 `coverUri=NULL`，缓存文件被当成孤儿删掉，等于白提。
+  - 根因：入库是整行 `@Upsert`，而扫描器只看得见文件系统，给的是 `coverUri=null`；SAF 通道的 artist/album/duration 也一直是 null。每次重扫都是「用更少的信息覆盖更全的信息」。
+  - 修复：`RoomLocalTrackStore.upsertAll` 先 `findByIds` 取本页已有记录，用 `mergedWithExisting` 合并——**扫描值优先，空缺才用库里的**。合并只发生在扫描入库路径，`RoomMetadataStore` 的写入不受影响。
+  - 代价：用户在文件里删掉某个标签时同步不过来（扫描给 null，会保留旧值）。两害相权，保住补出来的数据更重要，记入已知缺口。
+
+- 关键决策：
+  1. **`durationMs = 0` 作为「还没读过标签」的标记** —— 不加列、不升数据库版本。时长是任何能解析的音频都有的字段，读不到就说明我们没读过；而「artist 为空」不能当判据（有些文件本来就没标签，会每次扫描重读一遍，永远补不完）。读取失败时时长仍是 0，下次扫描自动重试。
+  2. **封面按内容哈希命名，不按曲目 id** —— 一张专辑 12 首歌内嵌同一张图，按曲目存 12 份；按内容存天然合并。实测同一张图两次预热命中同一个文件名。
+  3. **封面按需提取，不进扫描主流程** —— 1000 首各开一次 retriever 要几十秒，而用户可能只看前 20 行。标签是列表必须先有的数据，封面不是。
+  4. **补标签失败不影响扫描结果** —— Worker 里包了 try/catch，标签只是锦上添花，曲库能列出歌才是主任务。
+  5. **全量扫描用 `REPLACE`，增量用 `KEEP`** —— 原来全量也走 KEEP：用户点「重新扫描」时若正好有增量在跑，请求会被静默丢弃，点了没反应。打断扫描是安全的（按确定性 ID upsert）。
+  6. **封面回收只在全量扫描后做** —— 那是唯一会删曲目的路径，增量不可能产生新的孤儿文件。
+
+- 验证方式（全部真机，OPPO PJB110 / Android 12）：
+  - `./gradlew test` → **86 个测试，0 失败**（新增 31 个：`MetadataValuesTest` 7、`MetadataMergeTest` 6、`CoverCacheTest` 9、`LocalMetadataEnricherTest` 10、`ScanMergeTest` 6、`LocalLibrarySyncerTest` +3）
+  - **去重可观测**：全量 `扫描=1006 写入=503 删除=0 去重=503 耗时=635ms`
+  - **标签补齐**：用 ffmpeg 造了一个带完整 ID3 + 300×300 PNG 封面的 MP3，推到 `/sdcard/Music/PrimuseTest/` 且**不让媒体库索引**（模拟 SAF-only 文件）。扫描后 `元数据补齐 候选=1 更新=1 耗时=416ms`，库里得到 `封面测试曲|测试歌手|测试专辑|3030|7|2024`（trackNo 从 `7/12` 解析、year 从 `2024` 解析）
+  - **封面落盘**：`封面预热 候选=30 成功=1 无封面=29 耗时=400ms`，DB 得到 `file:///data/user/0/.../covers/1594...jpg`，`exec-out` 取回校验为 **936 字节的 300×300 PNG**，与源文件内嵌图一致
+  - **重扫不丢**：全量重扫后 `coverUri` 与标签全部存活，缓存文件没被回收
+  - **删除回收**：删掉文件 → `scan_volume` → 全量重扫 `清理幽灵条目 1 条`、`清理孤立封面 1 张`，库里 503 条、缓存目录空
+  - 顺带确认一个现象：文件删了但 MediaStore 还索引着时，全量扫描是 `删除=0` 的——因为 MediaStore 仍然返回它。这类「幽灵」要等系统重新扫描媒体库才会消失，不是我们的清理逻辑漏了。
+
+- 遗留问题：
+  1. 封面缓存没有容量上限，只有孤儿回收；设置页的清理入口待 P4-05。
+  2. 标签删除不同步（见上）。
+  3. 只实测了 MP3（带封面）与 WAV（无标签），FLAC / M4A 未实测。
+  4. 列表页封面显示与滚动性能要等 P1-09，所以 P1-07 只能标 `[?]`。
+- 给下一位的提醒：**`mergedWithExisting` 不是可选的优化，是防止重扫退化的补丁**。以后往扫描器里加字段时，问一句「这个字段扫描器拿得到吗」，拿不到就得进合并列表，否则每次重扫都会被抹掉。
+
+### 2026-11-11 · P2-01 / P2-02 · 播放内核与后台服务
+
+- 做了什么：
+  1. **P2-01**：`feature:player` 接入 Media3，`PlayerFactory` 统一构造 ExoPlayer，`Track → MediaItem` 映射带上通知栏要用的标题/歌手/专辑/封面。
+  2. **P2-02**：`PlaybackService`（`MediaSessionService`）+ `PlaybackController`（`MediaController` 封装，暴露 `StateFlow<PlaybackState>`）；清单注册服务与 `WAKE_LOCK` 权限。
+  3. 顺带把 P2-03 的队列与模式、P2-04 的音频焦点/拔出暂停配置一起落地。
+- 新增文件：`PlayMode.kt`、`TrackMediaItem.kt`、`PlayerFactory.kt`、`PlaybackService.kt`、`PlaybackController.kt`（删掉了该模块的 `ModuleMarker`）
+- 改动的文件：`feature/player/build.gradle.kts`（media3 + hilt + ksp）、`AndroidManifest.xml`（service + WAKE_LOCK）、`PrimuseApp` / `MainActivity`（临时播放/暂停/下一首/模式入口）
+
+- 关键决策：
+  1. **播放器活在 Service 里，UI 只拿 MediaController** —— 页面来去、Activity 重建都不影响播放；控制器断开重连也不打断声音。
+  2. **`PlayerFactory` 是唯一构造点**，三个开关写死在这里：音频焦点（来电/导航自动暂停续播）、耳机拔出暂停、`setWakeMode`（息屏不断）。散落在各处配这些开关，早晚漏一个。
+  3. **用 `MediaSessionService` 而不是自己写前台服务** —— 通知栏、锁屏、耳机按键、车机控制全由 Media3 通过系统 MediaSession 接好，自己写要重复实现一遍还容易漏 `foregroundServiceType`。
+  4. **`mediaId` 用 `Track.id`，不用 uri** —— 远程地址以后会带一次性签名，每次都不一样；`Track.id` 是稳定的，状态恢复和队列对账都靠它。
+  5. **`next()` 在队尾回到第一首** —— 用户按了按钮总得有反应；自动续播仍按 repeat 设置走（顺序模式播完就停），两者不冲突。
+  6. **`ResolvingDataSource` 现在恒等转发** —— 留着是给 P3 的接缝：远程鉴权/重定向在 DataSpec 层改写，不去污染 MediaItem 的 URI。
+  7. **`onTaskRemoved`：在播就继续，没播就停服务** —— 后台播放是本分，但别留一个空进程。
+
+- 验证方式（真机 OPPO PJB110 / Android 12）：
+  - 单测仍是 **86 个 0 失败**（播放层靠真机验收，没有加单测——MediaController 需要真实服务，纯 JVM 测不出东西）
+  - **三种格式**：MP3（120s，带内嵌封面）、WAV（5s）、FLAC（150s）均 `state=3` 且 position 持续推进，无 `ExoPlaybackException`
+  - **通知栏**：`channel=default_channel_id, category=transport, vis=PUBLIC`，三个动作「上一项/暂停/下一项」，`android.largeIcon=Icon(typ=BITMAP size=72x72)`（封面解码成功），标题/歌手正确
+  - **后台播放**：按 HOME 后 6 秒仍 `state=3`，`dumpsys activity services` 显示 `isForeground=true foregroundId=1001`
+  - **外部控制**：媒体键 85 → `state=2`（暂停）、再按 → `state=3`、87 → `active item id=1`（下一首）
+  - **单曲循环**：5 秒曲目切到 REPEAT_ONE，9 秒后仍 `state=3`、同一 item、`position=974ms`（已重头）
+  - **随机**：SHUFFLE 下连按三次下一首，item id `1 → 432 → 428 → 283`，明显非顺序
+- 踩到的坑：
+  1. `cmd media_session dispatch pause` 在这台 ROM 上抛 `packageName may not be empty`，改用 `input keyevent 85/87`（走的是同一条媒体键通路，反而更接近锁屏/耳机真实行为）。
+  2. `MediaSession.Builder.setSessionActivity()` 参数非空，`getLaunchIntentForPackage` 可能返回 null，要 `?.let`。
+  3. 播放测试曲（120s MP3 + 150s FLAC）留在设备 `/sdcard/Music/PrimuseTest/`，下次验播放直接用，别删。
+
+- 遗留问题：
+  1. **P2-04 三个场景没测**：拔耳机、来电打断、导航播报，adb 模拟不了，需要手动。配置已经就位（焦点/拔出开关都在 `PlayerFactory`）。
+  2. **队列拖拽排序没有 UI**：`PlaybackController.moveInQueue` 已实现，等 P2-05/P4-04。
+  3. **锁屏没截图验证**：走的是同一条 MediaSession 通路且通知 `vis=PUBLIC`，媒体键已实测，但没敢锁屏——设备若设了密码就回不来了。
+  4. 通知用的是 Media3 默认小图标与默认通道名，正式化留给 P4-05。
+- 给下一位的提醒：**要改播放行为，先看 `PlayerFactory`**，那里三个开关决定了后台/焦点/耳机的表现。调试时 `dumpsys media_session | grep -E "state=PlaybackState|metadata:"` 一眼能看出在播什么、暂停没有。
+
+### 2026-11-11 · P2-04 收尾 · 耳机拔出与来电打断（真机实测）
+
+- 背景：`PlayerFactory` 里两个开关（`setAudioAttributes(handleAudioFocus=true)`、`setHandleAudioBecomingNoisy(true)`）早就配好了，但「三个场景实测通过」这条一直空着——adb 没法拔耳机，设备上也没装任何音乐/视频应用能来抢焦点。
+- 本轮补的是**验收手段**，不是功能：
+  1. **耳机拔出**：`AUDIO_BECOMING_NOISY` 是系统保护广播，shell 直接发会被 `SecurityException` 拒掉；设备有 `su`，`adb root` 后以 uid 0 发送即可。实测播放中 `state=3 → 2`，立刻暂停。
+  2. **来电打断**：新增 `AudioFocusProbe`（**临时验收物**）——本进程的另一个焦点客户端申请 `AUDIOFOCUS_GAIN_TRANSIENT`（来电用的就是这个类型），AudioService 会给正在播放的 ExoPlayer 发 `LOSS_TRANSIENT`。实测 `state=3 → 2`。
+  3. **挂断恢复**：5 秒后探针 `abandonAudioFocusRequest`，AudioService 回 `GAIN`，ExoPlayer 自己续播。实测 `state=2 → 3`，`dumpsys audio` 里能看到 `AudioFocusManager ... gain: GAIN ... notified: true`。
+- 踩到的两个坑（都会静默失败，很难查）：
+  1. action 写成了 `android.intent.action.AUDIO_BECOMING_NOISY`——**正确的常量值是 `android.media.AUDIO_BECOMING_NOISY`**。广播发出去 result=0，播放毫无反应，因为根本没有接收器匹配。
+  2. 改成正确 action 后报 `Permission Denial ... from uid=2000`。保护广播只认系统/root，必须 `adb root`。
+- 验证完已 `adb unroot` 把 adbd 还原成 shell，别在用户设备上留 root 状态。
+- 遗留：`AudioFocusProbe` 和「模拟来电打断」按钮是临时的，P4-05 重写设置页时一起删。
+- 给下一位的提醒：这两条命令都在 `AGENTS.md` §8「真机调试速查」里，验播放回归时直接抄。
+
+---
+
+### 2026-11-11 · UI 设计 · 定稿提案 v1.0 + 可交互原型（9 屏）
+
+- 背景：`docs/06` 从 11-10 起就停在「草案 · 未确认」，Q1–Q4 悬着，P1-09 / P2-05 / P4-\* / P5-02 全部挂起。数据层和播放内核已经把能做的都做完了，UI 成了唯一瓶颈。
+- 本轮产出两份东西，都是**设计物，不是代码**（`feature/*/ui/` 依旧没动）：
+  1. `docs/07-ui-design.md` —— 定稿提案，回答 Q1–Q4，给出色彩/字体/间距令牌、9 屏规格、手势总表、横屏适配、无障碍要求、Compose 落地映射与验收清单。
+  2. `docs/design/prototype.html` —— 单文件离线原型，8 屏手机 + 1 屏横屏，点击屏幕内的导航/播放条能真的走一遍。支持 `#player`、`#queue` 这类锚点直达。
+- 四个决策：**3 Tab**（音乐库/搜索/设置，歌单移到音乐库顶栏）/ **歌曲行显示 44dp 封面**（另给紧凑模式）/ **播放页用自定义全屏浮层**（不是 `ModalBottomSheet`）/ **B 路线**（Material 3 承载 Primuse 视觉语言）。
+- 两个自有主张，是这版和 06 草案最大的区别：
+  1. **双空间**：浏览态跟随系统主题、浅色密集；播放态**恒定深色**，不受系统主题影响。收益是三点——大封面在深底上对比最强、OLED 息屏省电、从任何入口进播放页都是同一个「房间」。
+  2. **封面主色驱动**：播放页背景不用模糊封面（Compose 在 API 31 以下做不了实时模糊，且切歌掉帧），改成从封面取一个主色做 12% 径向渐晕。**一行代码，视觉收益 80%**。
+- 顺带修掉一个 06 没意识到的问题：**真机是 1280×720 横屏**，而 06 只写了手机竖屏。07 补了三档断点（<600 / 600–839 / ≥840），横屏走 `NavigationRail` + 双栏，队列面板改成右侧抽屉。
+- 验证方式：浏览器直接打开 `docs/design/prototype.html`。已用 Edge 无头模式逐屏截图核对过，修掉了三个渲染问题——首屏透明度动画不收敛导致整体发灰、队列页继承了浅色主题的深色文字在黑底上不可见、手机外框尺寸公式漏算 padding 导致高度被压。
+- 给下一位的提醒：
+  1. **用户没点头之前仍然不要写界面代码**，`docs/07` §10 的验收清单是给实现阶段的，不是开工许可。
+  2. 实现顺序别改：`UiTokens.kt` → `TrackRow` + 歌曲页 → `MiniPlayer` + `PlayerSheet`。先把「点歌能放、能收起」跑通，再铺其他屏。
+  3. 三个技术风险点写在 07 §9.3，其中**共享元素转场**最容易翻车——`SharedTransitionLayout` 不稳就降级成「淡入 + scale 0.92→1」，视觉损失可接受，别在这上面耗三天。
+
+---
+
+### 2026-11-11 · UI 落地 · 11 个文件，编译通过，APK 20 MB
+
+- 用户确认「修改项目UI」后开工。**视觉基准是 `preview/index.html`**（照搬 Primuse 的深色 + 蓝色 + 胶囊形态，结构照搬 NeriPlayer / MusicFree），不是 `docs/07` 那版浅色双主题。
+- 新增 11 个文件，全部在 `app/src/main/java/com/primuse/lite/ui/`：
+  `PrimuseApp.kt`、`theme/Theme.kt`、`icons/PlayerIcons.kt`、`components/TrackRow.kt`、`components/MiniPlayer.kt`、`library/LibraryScreen.kt`、`library/AlbumDetail.kt`、`library/LibraryViewModel.kt`、`player/PlayerSheet.kt`、`player/QueueSheet.kt`、`search/SearchScreen.kt`、`settings/SettingsScreen.kt`。
+- 三个值得记的决定：
+  1. **UI 不拆到 feature 模块**。`feature:library` / `feature:settings` 是纯 Kotlin 库，没有 Compose / Hilt / Coil 依赖；为 UI 单独配一遍会引入跨模块 KSP 风险。自用 App 先在 app 模块跑通，需要复用时再下沉。
+  2. **图标自绘，不引 `material-icons-extended`**。那个包未混淆时给 APK 加约 8 MB、给编译加几十秒，而播放器只需要 10 个图标（暂停、上下曲、随机、循环、队列、歌词、云、文件夹、唱片）。`PlayerIcons.kt` 用 `ImageVector.Builder` 描路径，零依赖。
+  3. **歌词页显示「暂无歌词」而不是假歌词**。LRC 解析是 P5-01，还没做。`LyricsPane` 的结构留着，接上时间轴即可，但绝不放假数据骗自己。
+- 顺手清理：删掉 `AudioFocusProbe` 与「模拟来电打断」按钮（P2-04 已验收，AGENTS 里早写明 P4-05 重写设置页时删）；`PlaybackController` 新增 `currentPositionMs()`，给进度条轮询用——不放进 `PlaybackState` 是因为 `Player.Listener` 只在事件时回调，播放中不推位置，让可见的页面自己拉更省。
+- 编译踩的坑：`ImageVector.Builder.path` 是扩展函数，必须 `import androidx.compose.ui.graphics.vector.path`；`Icons.Filled.PlayArrow` 也要单独 import（`Icons.Filled` 只提供对象本身，不导出成员）。
+- **未验证**：设备当时不在线（`adb connect 127.0.0.1:5555` 拒绝连接），只做到编译通过 + 单测通过，**一次都没装到真机上跑**。验收清单写在 AGENTS §8「UI 已落地，待真机验收」，第一件事是装机。
+- 给下一位：`scripts/check.sh` 第 6 项已改，现在检查 `app/ui` 而不是 `feature/*/ui`，别再被旧提示误导。
+
+---
+
+### 2026-11-11 · UI 真机验收 · 三 Tab / 播放页 / 队列 / 搜索 / 设置全部走通
+
+- 设备：`emulator-5554`，PJB110，900×1600 @320dpi（450×800dp），竖屏。**注意这台是模拟器，不是之前的无线真机**，所以 adb 用 `-s emulator-5554`，不需要 `adb connect`。
+- 逐项结果：
+  1. 三 Tab 切换、选中胶囊、内容正确。
+  2. 点歌 → `state=3` 播放中，胶囊迷你条带封面/标题/暂停键/进度线。
+  3. **拖动进度条 seek：拖到 66.7% → `position=100008ms`（曲长 150s），误差 < 1s，P2-05 的验收标准达成。**
+  4. 播放页封面/歌词双态切换正常。
+  5. 队列面板 505 首，当前曲高亮。
+  6. 搜索输入 FLAC 即时过滤出 1 条，当前播放行蓝色高亮 + 三根音柱。
+  7. 专辑网格 2 列等宽，**真实封面（粉红色那张）能正常加载**——Coil 读 `file://` 没问题。
+  8. 设置页分组、目录数、版本号（0.1.0）正确。
+- 验收中修掉两个真问题：
+  1. **封面占位图标按比例缩放是个坑**。`fillMaxSize(0.36f)` 在 44dp 列表封面上是 16dp（合适），在 300dp 播放页封面上变成 108dp 的大圆环，喧宾夺主。改成 `iconSize` 参数，播放页传固定 56dp。
+  2. **播放页缺 `navigationBarsPadding()`**。它是全屏 overlay，不走 Scaffold 的 inset 处理，全面屏手势条会压住底部「歌词/封面/队列」。补上。
+- 踩的坐标坑：`screencap` 出的图是 900×1600，但 `ViewImage` 显示时会缩到 608×1080（0.675）。**按截图目测的坐标去 `input tap` 会全部偏移**，第一次点歌点到了「艺术家」Tab。正确做法是先 `uiautomator dump` 拿真实 `bounds`，或者按 0.675 换算。
+- adb 在这台机器上每次新 shell 都要 `adb start-server`，否则 `device offline`。所有 adb 命令要串在同一个 bash 调用里。
+- 未做（属后续任务，不是 bug）：队列拖拽排序、播放页下滑收起手势、封面模糊背景、歌词解析。
+
+---
+
+### 2026-11-11 · P4-03 / P4-04 · 歌单持久化 + 播放页手势与模糊背景
+
+- P4-03 歌单：
+  - Room 升到 v2，新增 `playlists` / `playlist_tracks` 两张表，外键 `CASCADE`。**写显式 `MIGRATION_1_2`，不 destructive**——设备上已有 505 首歌，升级后实测全在。
+  - 入口在音乐库右上角「更多 → 播放列表」，全屏浮层展示，不占导航返回栈。支持新建、重命名、加歌、删歌；`TrackRow` 菜单多一项「从歌单移除」。
+  - 真机流程：新建 `TestMix` → 加 2 首 → 移除 1 首 → 改名 `Mix2` → 强停进程重启 → 歌单与剩余曲目都在。
+- P4-04 播放页：
+  - 背景改为 Coil `AsyncImage` + `Modifier.blur(64.dp)` + 暗色竖向渐变；无封面时保留原来的金/蓝径向渐晕。
+  - 手势**只挂在封面区、顶栏和歌词头部**：上滑打开队列，下滑收起播放页。挂根布局会抢走歌词 `LazyColumn` 的滚动，实测会把页面误收起——这个坑已经踩过。
+  - 收起动画用 `Animatable` 位移 + 透明度，返回键只收起浮层，不进系统返回栈。
+- 验证方式：`emulator-5554` 上逐项操作并截图；歌单数据用强停重启核对，播放页手势用真实滑动验证（歌词页内滚动不触发收起）。
+- 遗留问题：队列拖拽排序仍未做（P2-03 的 UI 部分）；封面缓存容量上限仍属 P4-05。
+- 给下一位的提醒：Room 迁移必须继续写显式版本，别为了省事开 `fallbackToDestructiveMigration()`。
+
+---
+
+### 2026-11-11 · P5-01 / P5-02 · 内嵌歌词 + 歌词滚动高亮真机验收
+
+- 新增 `EmbeddedLyrics.kt`：纯 JVM 解析 MP3 的 ID3v2.3/v2.4 `USLT` 与 FLAC 的 Vorbis Comment `LYRICS`。只读到元数据块就停，不把整首音频读进内存；任何异常返回 `null`，不影响播放。
+- `LyricsRepository` 改为两级查找：**同名 `.lrc` 优先，内嵌歌词兜底**。内嵌文本若带 `[mm:ss]` 时间标签，按 LRC 解析；没有时间标签则用 `Lyrics.plain()` 退化静态全文。
+- `Lyrics` 增加 `synced` 标志：静态歌词不高亮、不自动滚动、点击不 seek；播放页显示「歌词未同步 · 仅展示全文」。
+- 单测新增 13 个：ID3v2.3/v2.4、ISO-8859-1 / UTF-16 / UTF-8、内容描述跳过、非 USLT 帧、ID3v2.2 拒绝、FLAC 多块跳过、无歌词、损坏数据、静态歌词拆分。全量 `.\gradlew.bat test` → **114 个用例，0 失败**；`:app:assembleDebug` 通过。
+- 真机验证（`emulator-5554`）：
+  1. 构造带真实 `USLT` 的 `EmbeddedSynced.mp3`（无 `.lrc`）→ 播放页显示 6 行歌词，5 秒时第一行蓝色高亮；点第五行 → `position=42.7s`，高亮跳到第五行。
+  2. `EmbeddedPlain.mp3` 的 `USLT` 没有时间标签 → 显示「歌词未同步 · 仅展示全文」+ 四行静态歌词，无高亮。
+  3. `SidecarWins.mp3` 同时有内嵌歌词和同名 `.lrc` → 显示 `.lrc` 的两行，内嵌内容没有出现，优先级正确。
+- **踩坑**：ffmpeg 9 的 `-metadata lyrics=...` 写出来的是 `TXXX:USLT`，不是真正的 `USLT` 帧，解析器读不到。真机验收用的文件是手写 ID3v2.3 标签（Python 脚本在 `%TEMP%\primuse-lyrics-test\build_tags.py`，未入库）。以后造测试素材别信 ffmpeg 的 lyrics 元数据。
+- 遗留问题：**远程歌词未做**，依赖 P3 远程音源；P5-01 因此保持 `[~]`。FLAC 内嵌歌词只有单测，设备上没有造 FLAC Vorbis 样本。
+- 给下一位的提醒：真实世界里有标签器把 UTF-16 空描述写成单字节 `0` 后直接跟 BOM，解析器已兼容；改 `decodeUslt` 时别把这个分支删掉。
+
 ---
 
 ## P6-01 真机走查清单

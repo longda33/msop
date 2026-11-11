@@ -2,7 +2,16 @@ package com.primuse.lite.feature.local.scan
 
 import com.primuse.lite.core.model.Track
 
-/** 一次扫描的结果统计，用于日志与设置页展示。 */
+/**
+ * 一次扫描的结果统计，用于日志与设置页展示。
+ *
+ * 三个计数的关系是 `scanned = written + deduped`：
+ * - [scanned] 数据源**返回的记录数**（同一文件被两条通道各返回一次就计 2）
+ * - [written] 去重后的**曲目数**（按 id 唯一）
+ * - [deduped] 被判定为重复、没有新增的条数
+ *
+ * 注意「去重」不等于「丢弃」：重复记录仍然会 upsert，因为后到的来源元数据更全。
+ */
 data class ScanStats(
     val scanned: Int = 0,
     val written: Int = 0,
