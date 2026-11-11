@@ -17,8 +17,13 @@ class LocalLibrarySyncer(
 
     /**
      * @param full 传 true 强制全量重扫（忽略增量起点）
+     * @param onProgress 每写完一页回调一次，用于更新通知进度。参数为累计「已扫描 / 已写入」
      */
-    suspend fun sync(pageSize: Int = 500, full: Boolean = false): ScanStats {
+    suspend fun sync(
+        pageSize: Int = 500,
+        full: Boolean = false,
+        onProgress: (suspend (scanned: Int, written: Int) -> Unit)? = null,
+    ): ScanStats {
         val startedAt = System.currentTimeMillis()
         val since = if (full) 0L else (store.latestModified() ?: 0L)
 
@@ -45,6 +50,8 @@ class LocalLibrarySyncer(
                 store.upsertAll(ready)
                 written += ready.size
             }
+
+            onProgress?.invoke(scanned, written)
         }
 
         val stats = ScanStats(

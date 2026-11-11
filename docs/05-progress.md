@@ -153,6 +153,32 @@
   3. 尚未接入 Hilt 与 WorkManager，扫描还不能从 App 触发——这是 P1-08 的活。
 - 给下一位的提醒：**`LocalLibrarySyncer` 是全项目第一个有真实测试覆盖的核心逻辑**，改它之前先跑 `./gradlew :feature:local:testDebugUnitTest`。另外 `MediaStoreTrackSource` 里 `DATA` 列在 Android 11+ 已被废弃但仍可读，若某些机型返回 null 会走 `RELATIVE_PATH + DISPLAY_NAME` 兜底，这条兜底路径目前没有验证过。
 
+### 2026-11-11 · P1-08 · Hilt + WorkManager 接线，扫描可从 App 触发
+- 做了什么：把 P1-03 的扫描逻辑真正接进 App——Hilt 提供依赖、WorkManager 调度、通知显示进度、启动时自动触发一次增量扫描。
+- 新增文件：
+  - `core/database/.../di/DatabaseModule.kt` — 提供 `PrimuseDatabase`（`fallbackToDestructiveMigration`）与 `TrackDao`
+  - `feature/local/.../di/LocalModule.kt` — 提供 `TrackPageSource` / `LocalTrackStore` / `LocalLibrarySyncer`
+  - `feature/local/.../work/LocalScanWorker.kt` — `@HiltWorker` CoroutineWorker，失败重试上限 3 次
+  - `feature/local/.../work/ScanNotifier.kt` — 进度/完成/失败通知，含 Android 13+ 通知权限判断
+  - `feature/local/.../work/LocalScanScheduler.kt` — `enqueueUniqueWork + KEEP`，避免叠加任务
+  - `feature/local/src/main/res/` — 通知渠道文案与 `ic_scan.xml` 图标
+  - 修改：`LocalLibrarySyncer.sync` 增加 `onProgress` 回调；`PrimuseApplication` 实现 `Configuration.Provider`；`MainActivity` 启动时按权限触发扫描；`AndroidManifest` 移除 WorkManager 默认初始化
+- 关键技术决策：
+  1. **不用前台服务，用普通通知** — 扫描幂等（确定性 ID upsert），被杀重跑无副作用，不值得为它申请 `FOREGROUND_SERVICE_DATA_SYNC` 并承担 Android 14+ 的类型声明成本
+  2. **`onProgress` 必须是 suspend lambda** — 普通 lambda 里不能调 `setProgress()`（挂起函数）
+  3. **`enqueueUniqueWork + ExistingWorkPolicy.KEEP`** — 重复触发不叠加、不打断正在跑的任务
+  4. **manifest 必须移除 `WorkManagerInitializer`** — 否则 `@HiltWorker` 因找不到工厂而实例化失败
+- 踩的坑：`Suspension functions can only be called within coroutine body`（LocalScanWorker:35），原因是 `onProgress` 声明为普通函数类型。改成 `(suspend (Int, Int) -> Unit)?` 后解决。
+- 验证方式：
+  - `./gradlew :app:assembleDebug` → **BUILD SUCCESSFUL**，APK 13 MB（Hilt 依赖图缺绑定会在 KSP 阶段失败，编译通过即证明图完整）
+  - `./gradlew test` → **19 个测试，0 失败**
+  - **合并后 manifest 核对**：`InitializationProvider` 仍在（保留 emoji2 / lifecycle / profileinstaller），但 `androidx.work.WorkManagerInitializer` **已不存在**，确认按需初始化生效
+- 遗留问题：
+  1. **进度与恢复未在真机验证**——「杀进程后任务可恢复」「进度条实时」都需要设备。
+  2. **没有权限申请 UI**（P1-04 未做），首次启动会走「跳过自动扫描」分支并打日志，实际扫不到任何东西。
+  3. `ScanNotifier` 与 `LocalScanWorker` 无单测（依赖 Android 运行时）。
+- 给下一位的提醒：想真机验证这条链路，需要先装模拟器，然后手动授权 `READ_MEDIA_AUDIO`（或先在 P1-04 把申请流程做出来），再 `adb logcat -s PrimuseLite:V` 看「已排入扫描任务」→「本地库同步开始/结束」两对日志。若看到 `WorkerFactory` 相关异常，说明 manifest 的 initializer 移除没生效。
+
 ---
 
 ## P6-01 真机走查清单

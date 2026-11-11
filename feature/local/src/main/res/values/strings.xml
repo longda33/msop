@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="scan_channel_name">曲库扫描</string>
+    <string name="scan_channel_desc">扫描本机音乐并更新资料库</string>
+    <string name="scan_title">正在扫描音乐</string>
+    <string name="scan_progress">已扫描 %1$d 首，写入 %2$d 首</string>
+    <string name="scan_done">扫描完成：共 %1$d 首，写入 %2$d 首，耗时 %3$d 秒</string>
+    <string name="scan_failed">扫描失败：%1$s</string>
+</resources>

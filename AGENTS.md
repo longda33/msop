@@ -26,7 +26,7 @@
 
 | 项 | 值 |
 |---|---|
-| 阶段 | **P0 基本完成（P0-03/P0-04 待真机验证）· P1 进行中（P1-01/02 完成，P1-03 逻辑完成待性能验证）** |
+| 阶段 | **P0 基本完成（P0-03/P0-04 待真机验证）· P1 进行中（P1-01/02 完成，P1-03/08 逻辑完成待真机验证）** |
 | 代码量 | Kotlin 源码 **32 个**（其中单测 3 个文件 / 19 个用例）：app 4、core:common 3、core:database 6、core:model 2、feature:local 9、其余 feature 各 1 占位 |
 | 测试 | ✅ `./gradlew test` → **19 个测试，0 失败**（database 4 + feature:local 15） |
 | 构建状态 | ✅ **已验证**：`./gradlew tasks` 与 `./gradlew :app:assembleDebug` 均 **BUILD SUCCESSFUL**（首次约 1h4m，增量约 1m；APK 12 MB）。本机具 Microsoft OpenJDK 21 + Android SDK（android-37 / build-tools 37.0.0）。⚠️ **无 adb 设备、无模拟器**，装机启动与界面验收仍未验证 |
@@ -138,20 +138,30 @@ data class Artist(val id: String, val name: String, val albumCount: Int, val tra
 
 ## 8. 下一步做什么
 
-### 第一优先：让骨架跑起来（阻塞一切）
+### 已完成的地基（不要再重复做）
 
-按 `BUILD-NOTES.md` 执行。跑通后把 `TASKS.md` 的 P0-01～03 从 `[?]` 改为 `[x]`。
-**在跑通之前不要往下写任何功能代码**——地基未验证，后面全是空中楼阁。
+骨架、构建、`gradlew tasks`、Room 数据层、MediaStore 扫描、Hilt + WorkManager 接线、启动触发扫描——全部已落地并通过编译与 19 个单测。
 
-### 之后：三条可并行的线（都不依赖 UI）
+### 现在的真实卡点：**没有设备**
 
-| 线 | 任务 | 产出 |
+`adb devices` 为空，SDK 未装 emulator。因此所有「真机可见 / 真机可播 / 性能达标」类验收都做不了，
+P0-03、P0-04、P1-03、P1-08 全部停在 `[?]` / `[~]`。
+
+**建议先装模拟器**（SDK Manager → Emulator + 一个 system image），然后按顺序补验：
+1. 装 APK，确认三个 Tab 能切（P0-03）
+2. `adb logcat -s PrimuseLite:V` 确认 `Application onCreate` 与崩溃捕获已安装（P0-04）
+3. 手动授权 `READ_MEDIA_AUDIO` 后重启 App，看「已排入扫描任务」→「本地库同步结束」（P1-03/P1-08）
+
+### 三条可并行的线（都不依赖 UI）
+
+| 线 | 任务 | 状态 |
 |---|---|---|
-| **A 本地数据** | P1-02 → P1-03 → P1-04 → P1-05 → P1-06 → P1-07 → P1-08 | Room 表 + MediaStore 扫描 + SAF 扫描 + 去重 + 封面提取 + WorkManager |
-| **B 播放内核** | P2-01 → P2-02 → P2-03 → P2-04 | ExoPlayer + MediaSessionService + 队列 + 音频焦点 |
-| **C 远程音源** | P3-01 → P3-02 → P3-03 → P3-04 → P3-05 → P3-06 | Subsonic 客户端 + 流播缓存 + WebDAV 兜底 + 网络安全配置 |
+| **A 本地数据** | P1-02 ✅ → P1-03 ⏳ → **P1-04（下一个）** → P1-05 → P1-06 → P1-07 → P1-08 ⏳ | 扫描已能跑，但**没有权限申请 UI，实际扫不到东西** |
+| **B 播放内核** | P2-01 → P2-02 → P2-03 → P2-04 | 未开工 |
+| **C 远程音源** | P3-01 → P3-02 → P3-03 → P3-04 → P3-05 → P3-06 | 未开工 |
 
-**推荐顺序**：先 A 的前三步（有数据才有东西可播），再 B，再 C。C 的第一步 P3-01 必须实测，不能照着文档写。
+**推荐顺序**：P1-04（权限申请，解锁 A 线的真机验证）→ P2（播放内核）→ C（远程音源）。
+C 的第一步 P3-01 必须实测 OpenList 的真实响应，不能照着文档写。
 
 ### UI 相关的任务（P1-09、P2-05、P4-*、P5-02）全部挂起
 

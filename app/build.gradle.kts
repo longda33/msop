@@ -79,6 +79,10 @@ dependencies {
     ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
 
+    // WorkManager 的 Hilt 集成：Application 要实现 Configuration.Provider 并提供 HiltWorkerFactory
+    implementation(libs.hilt.work)
+    implementation(libs.androidx.work.runtime.ktx)
+
     implementation(project(":core:model"))
     implementation(project(":core:common"))
     implementation(project(":core:database"))
