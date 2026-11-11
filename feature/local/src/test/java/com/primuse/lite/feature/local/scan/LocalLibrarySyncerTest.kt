@@ -29,8 +29,13 @@ class LocalLibrarySyncerTest {
         }
     }
 
-    private class FakeStore(var latest: Long? = null) : LocalTrackStore {
-        val stored = LinkedHashMap<String, Track>()
+    private class FakeStore(
+        var latest: Long? = null,
+        preset: List<Track> = emptyList(),
+    ) : LocalTrackStore {
+        val stored = LinkedHashMap<String, Track>().apply {
+            preset.forEach { put(it.id, it) }
+        }
 
         override suspend fun allIds(): Set<String> = stored.keys.toSet()
 
@@ -38,6 +43,10 @@ class LocalLibrarySyncerTest {
 
         override suspend fun upsertAll(tracks: List<Track>) {
             tracks.forEach { stored[it.id] = it }
+        }
+
+        override suspend fun deleteByIds(ids: List<String>) {
+            ids.forEach { stored.remove(it) }
         }
 
         override suspend fun count(): Int = stored.size
@@ -130,5 +139,55 @@ class LocalLibrarySyncerTest {
 
         assertTrue(stats.isEmpty)
         assertEquals(0, stats.written)
+    }
+
+    @Test
+    fun `全量扫描会删除库中已不存在的条目`() = runTest {
+        // 库里原本有 a、b、gone，本次只扫到 a、b
+        val store = FakeStore(preset = listOf(track("a"), track("b"), track("gone")))
+        val source = FakeSource(listOf(listOf(track("a"), track("b"))))
+
+        val stats = LocalLibrarySyncer(source, store).sync(full = true)
+
+        assertEquals(1, stats.deleted)
+        assertEquals(setOf("a", "b"), store.allIds())
+    }
+
+    @Test
+    fun `增量扫描不删除任何条目`() = runTest {
+        // 增量只看得到变更文件，据此清理会误删整个曲库
+        val store = FakeStore(
+            latest = 1_700_000_000L,
+            preset = listOf(track("a"), track("b"), track("c")),
+        )
+        val source = FakeSource(listOf(listOf(track("a"))))
+
+        val stats = LocalLibrarySyncer(source, store).sync(full = false)
+
+        assertEquals(0, stats.deleted)
+        assertEquals(3, store.count())
+    }
+
+    @Test
+    fun `全量扫描读到零首时不清理曲库`() = runTest {
+        // 安全阀：权限被撤销时全量扫描返回空，照常清理会清空整个库
+        val store = FakeStore(preset = listOf(track("a"), track("b")))
+        val source = FakeSource(emptyList())
+
+        val stats = LocalLibrarySyncer(source, store).sync(full = true)
+
+        assertEquals(0, stats.deleted)
+        assertEquals(2, store.count())
+    }
+
+    @Test
+    fun `全量扫描结果与库内完全一致时不删除`() = runTest {
+        val store = FakeStore(preset = listOf(track("a"), track("b")))
+        val source = FakeSource(listOf(listOf(track("a"), track("b"))))
+
+        val stats = LocalLibrarySyncer(source, store).sync(full = true)
+
+        assertEquals(0, stats.deleted)
+        assertEquals(2, store.count())
     }
 }

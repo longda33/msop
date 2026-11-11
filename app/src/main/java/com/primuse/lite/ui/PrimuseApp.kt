@@ -10,6 +10,7 @@ import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -42,7 +43,7 @@ private val tabs = listOf(
 )
 
 @Composable
-fun PrimuseApp() {
+fun PrimuseApp(onRescan: () -> Unit = {}) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
@@ -94,6 +95,11 @@ fun PrimuseApp() {
                 PlaceholderScreen(
                     title = "设置",
                     description = "P4-05 将在这里放扫描目录、OpenList 服务器、缓存清理",
+                    action = {
+                        // 临时的功能入口：全量重扫是删除清理与排障的必要手段，
+                        // UI 定稿后并入正式的设置页。
+                        Button(onClick = onRescan) { Text("重新扫描曲库") }
+                    },
                 )
             }
         }
@@ -101,7 +107,11 @@ fun PrimuseApp() {
 }
 
 @Composable
-private fun PlaceholderScreen(title: String, description: String) {
+private fun PlaceholderScreen(
+    title: String,
+    description: String,
+    action: (@Composable () -> Unit)? = null,
+) {
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center,
@@ -117,6 +127,7 @@ private fun PlaceholderScreen(title: String, description: String) {
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
             )
+            action?.invoke()
         }
     }
 }

@@ -23,6 +23,10 @@ interface TrackDao {
     @Query("SELECT id FROM tracks")
     suspend fun allIds(): List<String>
 
+    /** 只取某一来源的 id。清理幽灵条目时必须按来源过滤，否则会误删其他来源的曲目。 */
+    @Query("SELECT id FROM tracks WHERE source = :source")
+    suspend fun idsBySource(source: SourceType): List<String>
+
     /** 增量扫描的起点：某来源下最大的修改时间。 */
     @Query("SELECT MAX(lastModified) FROM tracks WHERE source = :source")
     suspend fun latestModified(source: SourceType): Long?
@@ -32,6 +36,9 @@ interface TrackDao {
 
     @Query("DELETE FROM tracks WHERE id = :id")
     suspend fun deleteById(id: String)
+
+    @Query("DELETE FROM tracks WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<String>)
 
     @Query("DELETE FROM tracks WHERE source = :source")
     suspend fun deleteBySource(source: SourceType)

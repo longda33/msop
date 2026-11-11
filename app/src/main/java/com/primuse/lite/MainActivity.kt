@@ -34,7 +34,9 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                 ) {
-                    PrimuseApp()
+                    PrimuseApp(
+                        onRescan = { scanScheduler.enqueue(full = true) },
+                    )
                 }
             }
         }

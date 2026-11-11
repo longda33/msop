@@ -10,13 +10,25 @@ class RoomLocalTrackStore(
     private val dao: TrackDao,
 ) : LocalTrackStore {
 
-    override suspend fun allIds(): Set<String> = dao.allIds().toHashSet()
+    /**
+     * 只返回 LOCAL 来源的 id。
+     *
+     * 用 `allIds()` 会把远程曲目也带进来，一旦全量扫描后做差集清理，
+     * 远程曲目会被当成「文件已删除」全部抹掉。
+     */
+    override suspend fun allIds(): Set<String> =
+        dao.idsBySource(SourceType.LOCAL).toHashSet()
 
     override suspend fun latestModified(): Long? = dao.latestModified(SourceType.LOCAL)
 
     override suspend fun upsertAll(tracks: List<Track>) {
         if (tracks.isEmpty()) return
         dao.upsertAll(tracks.map { it.toEntity() })
+    }
+
+    override suspend fun deleteByIds(ids: List<String>) {
+        if (ids.isEmpty()) return
+        dao.deleteByIds(ids)
     }
 
     override suspend fun count(): Int = dao.count()

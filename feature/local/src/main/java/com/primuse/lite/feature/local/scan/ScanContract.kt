@@ -6,6 +6,7 @@ import com.primuse.lite.core.model.Track
 data class ScanStats(
     val scanned: Int = 0,
     val written: Int = 0,
+    val deleted: Int = 0,
     val deduped: Int = 0,
     val elapsedMs: Long = 0L,
 ) {
@@ -25,11 +26,17 @@ fun interface TrackPageSource {
 }
 
 /**
- * 同步所需的存储能力。只声明用得到的四个方法，避免为了测试去实现整个 TrackDao。
+ * 同步所需的存储能力。只声明用得到的方法，避免为了测试去实现整个 TrackDao。
  */
 interface LocalTrackStore {
+    /** 库内**本机来源**的全部 id。清理幽灵条目时用来做差集。 */
     suspend fun allIds(): Set<String>
+
     suspend fun latestModified(): Long?
+
     suspend fun upsertAll(tracks: List<Track>)
+
+    suspend fun deleteByIds(ids: List<String>)
+
     suspend fun count(): Int
 }
