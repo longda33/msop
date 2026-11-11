@@ -26,8 +26,9 @@
 
 | 项 | 值 |
 |---|---|
-| 阶段 | **P0 基本完成（P0-03/P0-04 待真机验证）· P1 已开工（P1-01/02 完成）** |
-| 代码量 | Kotlin 源码 **24 个**：app 4、core:common 3、core:database 7（含 1 个单测）、core:model 2、core:datastore/network 各 1、feature 各 1 占位 |
+| 阶段 | **P0 基本完成（P0-03/P0-04 待真机验证）· P1 进行中（P1-01/02 完成，P1-03 逻辑完成待性能验证）** |
+| 代码量 | Kotlin 源码 **32 个**（其中单测 3 个文件 / 19 个用例）：app 4、core:common 3、core:database 6、core:model 2、feature:local 9、其余 feature 各 1 占位 |
+| 测试 | ✅ `./gradlew test` → **19 个测试，0 失败**（database 4 + feature:local 15） |
 | 构建状态 | ✅ **已验证**：`./gradlew tasks` 与 `./gradlew :app:assembleDebug` 均 **BUILD SUCCESSFUL**（首次约 1h4m，增量约 1m；APK 12 MB）。本机具 Microsoft OpenJDK 21 + Android SDK（android-37 / build-tools 37.0.0）。⚠️ **无 adb 设备、无模拟器**，装机启动与界面验收仍未验证 |
 | 版本控制 | ✅ 已 `git init` 并提交首个 commit（2026-11-11），此前无历史 |
 | UI 状态 | ⚠️ **未确认**，`docs/06` §8 的 Q1–Q4 全待定，**禁止写界面代码** |

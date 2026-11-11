@@ -125,6 +125,34 @@
   2. `TrackDao` 的 SQL 只经过编译期校验，**未在真实数据库上执行过**。P1-03 接入扫描后需补一次真机验证。
 - 给下一位的提醒：Room 的 KSP 校验很有价值但**不等于跑通**——它只保证 SQL 语法和映射正确，不保证查询结果符合预期。P1-03 第一次写入真实数据后，务必用 `adb shell run-as` 或 Database Inspector 看一眼 `tracks` 表。
 
+### 2026-11-11 · P1-03 · MediaStore 扫描入库（逻辑完成，性能待真机验证）
+- 做了什么：`feature:local` 落地本机扫描。刻意把「Android 数据读取」和「同步逻辑」拆开，让核心逻辑能在无设备的 JVM 单测里跑。
+- 新增文件：
+  - `scan/ScanContract.kt` — `TrackPageSource` / `LocalTrackStore` 两个接口 + `ScanStats`
+  - `scan/TrackIdFactory.kt` — 路径归一化 + SHA-1 生成 `local:` 前缀 ID
+  - `scan/LocalLibrarySyncer.kt` — 分页、批内去重、补 `addedAt`、统计
+  - `scan/MediaStoreTrackSource.kt` — MediaStore 分页查询（`QUERY_ARG_LIMIT/OFFSET`，API 26+ 原生支持）
+  - `scan/RoomLocalTrackStore.kt` — `LocalTrackStore` 的 Room 实现
+  - `permission/AudioPermission.kt` — 13+ 用 `READ_MEDIA_AUDIO`，≤12 用 `READ_EXTERNAL_STORAGE`
+  - 单测：`TrackIdFactoryTest`（7）、`LocalLibrarySyncerTest`（8）
+- 关键技术决策：
+  1. **ID 用路径哈希，不用 MediaStore `_ID`** — `_ID` 在媒体库重建/换卡后会变，会让播放记录和歌单全部失联
+  2. **分页用 `QUERY_ARG_LIMIT`/`QUERY_ARG_OFFSET`** — API 26+ 原生支持，不用 `sortOrder + " LIMIT n"` 那种非官方 hack
+  3. **`lastModified` 单位是秒** — 与 MediaStore `DATE_MODIFIED` 原生单位一致，不做毫秒转换，避免增量比较时两边单位错位
+  4. **路径归一化不做大小写转换** — 大小写敏感存储上 `A.flac` 与 `a.flac` 是两个文件
+- 踩的坑：
+  - `Cursor.columnIndexOrNull` 返回类型写成 `Int`，`takeIf` 实际返回 `Int?`，编译报 `Return type mismatch`
+  - 8 个同步测试首轮全挂：`android.util.Log not mocked`。用 `testOptions.unitTests.isReturnDefaultValues = true` 解决（已在 build 文件注明：将来需要真实 Android 行为时改 Robolectric）
+- 验证方式：
+  - `./gradlew :feature:local:testDebugUnitTest` → **15 个测试全过**（7 + 8）
+  - `./gradlew test` → **19 个测试，0 失败 0 错误**（含 database 的 4 个）
+  - `./gradlew :app:assembleDebug` → **BUILD SUCCESSFUL**，APK 13 MB
+- 遗留问题：
+  1. **性能指标未验证**：P1-03 要求「1 万首首次 < 30s、二次 < 3s」，需要真机 + 真实音乐库，当前无设备。
+  2. `MediaStoreTrackSource` 与 `RoomLocalTrackStore` **没有单测覆盖**（依赖 Android 运行时），只过了编译。
+  3. 尚未接入 Hilt 与 WorkManager，扫描还不能从 App 触发——这是 P1-08 的活。
+- 给下一位的提醒：**`LocalLibrarySyncer` 是全项目第一个有真实测试覆盖的核心逻辑**，改它之前先跑 `./gradlew :feature:local:testDebugUnitTest`。另外 `MediaStoreTrackSource` 里 `DATA` 列在 Android 11+ 已被废弃但仍可读，若某些机型返回 null 会走 `RELATIVE_PATH + DISPLAY_NAME` 兜底，这条兜底路径目前没有验证过。
+
 ---
 
 ## P6-01 真机走查清单
