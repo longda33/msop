@@ -104,6 +104,27 @@
 - 遗留问题：**无 adb 设备、无模拟器**（`adb devices` 为空，SDK 未装 emulator），P0-02 的「能启动」与 P0-03 的「真机可见底部 Tab」仍无法验收，两项状态分别为 `[x]`（仅构建）与 `[~]`。
 - 给下一位的提醒：**AGP 9 的 `beforeVariants` 静态类型不完整**，遇到类似 `Unresolved reference` 先打印 `variantBuilder.javaClass.methods` 确认属性是否存在，再考虑强转接口，不要盲目改写法。另外装个模拟器（SDK Manager → Emulator + system image）就能解锁 P0-03 和后续所有 UI 验收。
 
+### 2026-11-11 · P0-04 + P1-02 · 日志/崩溃捕获 + Room 数据层
+- 做了什么：
+  1. **P0-04**：`core:common` 增加 `AppLog`（统一 TAG `PrimuseLite`）与 `CrashReporter`（记录后交回系统默认处理，不吞异常），`PrimuseApplication` 在 `onCreate` 安装。
+  2. **P1-02**：`core:database` 落地 Room——`TrackEntity`（17 字段 / 4 索引）、`TrackDao`（Flow 观察 + Upsert + 增量扫描用的 `latestModified`）、`PrimuseDatabase`、`Converters`、`TrackMapper`，并配 `room.schemaLocation` 导出 schema。
+  3. 补 `TrackMapperTest` 4 个纯 JVM 单测（本地/远程/来源类型/可空字段往返），让 `./gradlew test` 真正有东西可跑。
+  4. 新增 `.gitattributes` 固定换行符，避免 `gradlew` 在非 Windows 环境被 CRLF 破坏。
+- 改了哪些文件：
+  - 新增：`core/common/.../log/AppLog.kt`、`core/common/.../crash/CrashReporter.kt`
+  - 新增：`core/database/.../entity/TrackEntity.kt`、`dao/TrackDao.kt`、`PrimuseDatabase.kt`、`Converters.kt`、`mapper/TrackMapper.kt`、`src/test/.../TrackMapperTest.kt`
+  - 新增：`core/database/schemas/.../1.json`（自动生成，入库）
+  - 修改：`PrimuseApplication.kt`、`core/database/build.gradle.kts`（ksp + room + junit）、`gradle/libs.versions.toml`（junit 4.13.2）、`.gitattributes`
+- 验证方式：
+  - `./gradlew :core:database:assembleDebug` → **BUILD SUCCESSFUL in 7m44s**（KSP 编译期校验 DAO 的 SQL 语法与实体映射）
+  - schema 导出确认：`tracks` 表 17 字段、4 个索引（source/album/artist/lastModified）、主键 `id`
+  - `./gradlew :core:database:testDebugUnitTest` → **BUILD SUCCESSFUL**，`tests=4 failures=0 errors=0`
+  - `./gradlew :app:assembleDebug` → **BUILD SUCCESSFUL in 1m12s**，APK 17 MB（Room 使体积从 12 MB 增至 17 MB）
+- 遗留问题：
+  1. **仍无 adb 设备/模拟器**，P0-03（真机可见 Tab）与 P0-04（真机日志输出）保持 `[~]` / `[?]`。
+  2. `TrackDao` 的 SQL 只经过编译期校验，**未在真实数据库上执行过**。P1-03 接入扫描后需补一次真机验证。
+- 给下一位的提醒：Room 的 KSP 校验很有价值但**不等于跑通**——它只保证 SQL 语法和映射正确，不保证查询结果符合预期。P1-03 第一次写入真实数据后，务必用 `adb shell run-as` 或 Database Inspector 看一眼 `tracks` 表。
+
 ---
 
 ## P6-01 真机走查清单

@@ -11,8 +11,8 @@
 
 | 阶段 | 目标 | 任务数 | 预估 | 状态 |
 |---|---|---|---|---|
-| **P0** 立项与骨架 | 工程能编译、能装、能跑空壳 | 4 | 2–3 天 | 3 项待验证 |
-| **P1** 本地媒体库 | 列出本机所有歌并入库（MediaStore + SAF 双通道） | 9 | 7–9 天 | 1 项待验证 |
+| **P0** 立项与骨架 | 工程能编译、能装、能跑空壳 | 4 | 2–3 天 | 2 完成 / 1 进行中 / 1 待验证 |
+| **P1** 本地媒体库 | 列出本机所有歌并入库（MediaStore + SAF 双通道） | 9 | 7–9 天 | 1 完成 / 1 待验证 |
 | **P2** 播放内核 | 点歌能放，切后台不断，锁屏可控 | 5 | 5–7 天 | 未开始 |
 | **P3** OpenList 接入 | 浏览公网远程音乐库并流播（含 HTTPS 与证书） | 7 | 9–13 天 | 未开始 |
 | **P4** 界面 | 四种浏览 + 搜索 + 队列 + 播放页 | 5 | 7–10 天 | 未开始 |
@@ -34,14 +34,14 @@
 | `[x]` P0-01 | 初始化 Gradle KTS 工程 + `gradle/libs.versions.toml` | `./gradlew tasks` 成功；版本全在 toml 中 | — | `docs/04` §1 |
 | `[x]` P0-02 | 建 12 个模块骨架 + Hilt 装配 | `./gradlew :app:assembleDebug` 出 APK（12 MB）；真机启动待验证 | P0-01 | `docs/02` §2 |
 | `[~]` P0-03 | 接入 Compose + Material3 + Navigation，做出一个空 Tab 页 | 编译通过；**真机可见底部 Tab 待验证**（当前无 adb 设备） | P0-02 | `docs/04` §2 |
-| `[ ]` P0-04 | 建 `Application` 类 + 日志封装 + 崩溃捕获 | 冷启动日志有 `PrimuseLite` tag 输出 | P0-02 | — |
+| `[?]` P0-04 | 建 `Application` 类 + 日志封装 + 崩溃捕获 | 编译通过；**真机日志输出待验证**（无 adb 设备） | P0-02 | — |
 
 ## P1 — 本地媒体库
 
 | # | 任务 | 验收标准 | 依赖 | 参考 |
 |---|---|---|---|---|
 | `[?]` P1-01 | 定义 `Track` / `SourceType` / `Album` / `Artist` 模型 | 字段与 `AGENTS.md` §7 一致 | P0-02 | `AGENTS.md` §7 |
-| `[ ]` P1-02 | Room 实体 + DAO + 数据库 + 索引 | `TrackDao.getAll()` 单测通过；`source` 建索引 | P1-01 | `docs/04` §3 |
+| `[x]` P1-02 | Room 实体 + DAO + 数据库 + 索引 | KSP 编译期校验 DAO SQL 通过；schema 确认 4 个索引（source/album/artist/lastModified）；mapper 4 个单测全过 | P1-01 | `docs/04` §3 |
 | `[ ]` P1-03 | **MediaStore 主通道**：音频查询、分页 500/批、按 `date_modified` 增量 | 1 万首库首次扫描 < 30s，二次 < 3s | P1-02 | `docs/02` §9.1 |
 | `[ ]` P1-04 | 权限：`READ_MEDIA_AUDIO`（13+）/ `READ_EXTERNAL_STORAGE`（≤12），拒绝时有引导页 | 拒绝后不崩，可再次申请 | P1-03 | `docs/04` §4 |
 | `[ ]` P1-05 | **SAF 自定义目录**：`OpenDocumentTree` + 持久授权 + `ContentResolver.query(childrenUri)` 批量遍历 | 添加 `/我的音乐` 后重启仍有效；1 万文件 < 40s | P1-04 | `docs/02` §9.2 |

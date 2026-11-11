@@ -1,0 +1,10 @@
+# 统一换行符，避免 gradlew 被 Windows 的 CRLF 破坏后无法在 Linux/macOS 执行
+* text=auto
+
+*.sh      text eol=lf
+gradlew   text eol=lf
+*.bat     text eol=crlf
+*.jar     binary
+*.apk     binary
+*.png     binary
+*.jpg     binary
