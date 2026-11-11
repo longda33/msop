@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose 应用不需要 AppCompat / Material Components 主题，
+         用平台主题即可避免引入 com.google.android.material 依赖。 -->
+    <style name="Theme.PrimuseLite" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>
