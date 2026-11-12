@@ -33,12 +33,12 @@
 | 测试 | ✅ `.\gradlew.bat test` → **debug 19 个文件 / 165 个用例，0 失败**（另 release 变体复跑 app 的 6 个用例）。本轮新增 `ServerUrlTest` 11、`EqualizerTuningTest` 14、`RemoteTrackMapperTest` 9、`QueueReorderTest` 6、`SubsonicMetadataTest` 11 |
 | 真机验证 | ✅ 历轮已验：三 Tab、扫描入库、通知、SAF、幽灵清理、标签/封面、MP3/WAV/FLAC 播放、后台/通知栏/媒体键、循环与随机、耳机拔出、来电打断续播、歌单持久化、播放页手势、歌词、封面清理。**本轮新增**：OpenList 配置/测试/同步（23 首 454ms）、远程 FLAC 播放与拖动 seek（68s→208s）、均衡器预设实时生效（设备 5 段）、目录管理弹窗、release 包全套回归；**Subsonic 启用后**：23 首全部补全艺术家/专辑/封面（8476ms）、真实 JPEG 封面（129KB，Coil 缓存 180KB）、播放 `state=3` 元数据正确 |
 | 构建状态 | ✅ `./gradlew tasks`、`test`、`:app:assembleDebug`（19.3 MB）、`:app:assembleRelease`（**3.0 MB**，R8 + V2 自签名）全部成功。release 首轮约 5m。SDK：android-37 / build-tools 37.0.0 |
-| 版本控制 | ✅ git 仓库。`app/release.jks` 与 `keystore.properties` 已加入 `.gitignore`，**不要提交** |
+| 版本控制 | ✅ GitHub 公开仓库 <https://github.com/longda33/msop>（默认分支 `main`）。`app/release.jks` 与 `keystore.properties` 已加入 `.gitignore`，**不要提交** |
 | UI 状态 | ✅ **`app/ui/` 22 个界面文件**，本轮新增 `EqualizerScreen`、`OpenListConfigScreen`、`QueueReorder`。所有设置行都能点出真实功能 |
 | 下一步 | 见 §8（4 个可选打磨项） |
 | 本机音乐位置 | 默认 MediaStore 标准目录，可追加 / **移除** SAF 自定义目录 |
 | OpenList 部署 | **已实测**：OpenList v4.2.9 公网 HTTPS。Subsonic 后已启用，鉴权只认 `apiKey`，负责元数据与封面；流播仍走原生 REST。详见 `docs/03` §6（原生 REST）与 §7（Subsonic） |
-| 最后更新 | 2026-11-11 晚（Subsonic 元数据增强 + 真实封面 + Coil 网络依赖修复） |
+| 最后更新 | 2026-11-12（项目改名为 **msop**，包名 `com.msop.player`；开源到 GitHub） |
 
 **每次完成任务后必须更新三处**：本节、`TASKS.md` 对应勾选框、`docs/05-progress.md` 追加一条。
 
