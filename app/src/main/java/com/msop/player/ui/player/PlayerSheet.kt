@@ -50,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -60,10 +61,14 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
@@ -77,6 +82,8 @@ import com.msop.player.ui.theme.Palette
 import com.msop.player.ui.theme.Shapes
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.msop.player.feature.lyrics.Lyrics
+import kotlin.math.abs
 
 /**
  * 全屏播放页。用 overlay 而不是路由：返回键只收起，不进返回栈，
@@ -740,7 +747,7 @@ private fun LyricsPane(
 
 @Composable
 private fun LyricLines(
-    lyrics: com.msop.player.feature.lyrics.Lyrics,
+    lyrics: Lyrics,
     positionMs: Long,
     onSeek: (Long) -> Unit,
     modifier: Modifier = Modifier,
@@ -759,6 +766,8 @@ private fun LyricLines(
         }
     }
 
+    // BetterLyrics 式：弹簧动画把当前行平滑居中，而不是硬跳
+    val scrollSpec = spring<Float>(stiffness = 650f, dampingRatio = 0.9f)
     LaunchedEffect(currentIndex, autoFollow) {
         if (lyrics.synced && autoFollow && currentIndex >= 0) {
             listState.animateScrollToItem(currentIndex)
@@ -767,12 +776,27 @@ private fun LyricLines(
             if (item != null) {
                 val viewportCenter = (layout.viewportStartOffset + layout.viewportEndOffset) / 2
                 val itemCenter = item.offset + item.size / 2
-                listState.animateScrollBy((itemCenter - viewportCenter).toFloat())
+                listState.animateScrollBy((itemCenter - viewportCenter).toFloat(), scrollSpec)
             }
         }
     }
 
-    BoxWithConstraints(modifier) {
+    // 上下边缘渐隐：把歌词「融」进背景，远处歌词透视淡出（BetterLyrics 的 spatial fade）
+    BoxWithConstraints(
+        modifier.drawWithContent {
+            drawContent()
+            drawRect(
+                brush = Brush.verticalGradient(
+                    colorStops = arrayOf(
+                        0.0f to Palette.Ink,
+                        0.14f to Color.Transparent,
+                        0.84f to Color.Transparent,
+                        1.0f to Palette.Ink,
+                    ),
+                ),
+            )
+        },
+    ) {
         val edgePadding = if (lyrics.synced) maxHeight / 2 else 12.dp
         LazyColumn(
             state = listState,
@@ -781,24 +805,72 @@ private fun LyricLines(
             contentPadding = PaddingValues(vertical = edgePadding),
         ) {
             itemsIndexed(lyrics.lines) { index, line ->
-                val active = index == currentIndex
-                Text(
-                    text = line.text,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (active) Palette.BlueLight else Palette.TextTertiary,
-                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .then(
-                            if (lyrics.synced) {
-                                Modifier.clickable { onSeek(line.timeMs) }
-                            } else {
-                                Modifier
-                            },
+                val active = lyrics.synced && index == currentIndex
+                val distance = if (currentIndex >= 0) abs(index - currentIndex) else Int.MAX_VALUE
+                val near = distance == 1
+
+                when {
+                    // 当前行 + 逐字标签：卡拉OK式逐字高亮（已唱变亮，未唱保持暗）
+                    active && line.words.isNotEmpty() -> {
+                        val activeWord = line.words.indexOfLast { it.timeMs <= positionMs }
+                        val annotated = buildAnnotatedString {
+                            line.words.forEachIndexed { wi, w ->
+                                val sung = wi <= activeWord
+                                withStyle(
+                                    SpanStyle(color = if (sung) Color.White else Color(0x52FFFFFF)),
+                                ) { append(w.text) }
+                                if (wi != line.words.lastIndex) append(" ")
+                            }
+                        }
+                        Text(
+                            text = annotated,
+                            fontSize = 20.sp,
+                            lineHeight = 36.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = (-0.2).sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSeek(line.timeMs) }
+                                .padding(vertical = 11.dp),
                         )
-                        .padding(vertical = 7.dp),
-                )
+                    }
+
+                    // 当前行：大号加粗纯白（对应 index.html 的 .l.on）
+                    active -> Text(
+                        text = line.text,
+                        fontSize = 20.sp,
+                        lineHeight = 36.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = (-0.2).sp,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSeek(line.timeMs) }
+                            .padding(vertical = 11.dp),
+                    )
+
+                    // 非当前行：邻近行稍亮、远处更暗（对应 .l.near / .l）
+                    else -> {
+                        val color = when {
+                            !lyrics.synced -> Color(0xB2FFFFFF)
+                            near -> Color(0x85FFFFFF)
+                            else -> Color(0x52FFFFFF)
+                        }
+                        Text(
+                            text = line.text,
+                            fontSize = 15.sp,
+                            lineHeight = 31.sp,
+                            color = color,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(if (lyrics.synced) Modifier.clickable { onSeek(line.timeMs) } else Modifier)
+                                .padding(vertical = 3.dp),
+                        )
+                    }
+                }
             }
         }
     }

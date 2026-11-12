@@ -140,4 +140,38 @@ class LrcParserTest {
     fun `indexAt 在空歌词上返回负一`() {
         assertFalse(LrcParser.parse("").indexAt(1_000) >= 0)
     }
+
+    @Test
+    fun `逐字标签解析为 words`() {
+        val lyrics = LrcParser.parse("[00:12.00]<00:12.00>被 <00:13.50>命 <00:15.00>中")
+
+        assertEquals(1, lyrics.lines.size)
+        val line = lyrics.lines[0]
+        assertEquals(3, line.words.size)
+        assertEquals("被", line.words[0].text)
+        assertEquals("命", line.words[1].text)
+        assertEquals("中", line.words[2].text)
+        assertEquals(12_000L, line.words[0].timeMs)
+        assertEquals(15_000L, line.words[2].timeMs)
+        // 整行文本仍可用（无时间轴时退化展示）
+        assertEquals("被 命 中", line.text)
+        assertTrue(lyrics.synced)
+    }
+
+    @Test
+    fun `无逐字标签时 words 为空且向后兼容`() {
+        val lyrics = LrcParser.parse("[00:01.00]普通歌词")
+
+        assertEquals(1, lyrics.lines.size)
+        assertTrue(lyrics.lines[0].words.isEmpty())
+    }
+
+    @Test
+    fun `offset 同样作用于逐字时间`() {
+        val lyrics = LrcParser.parse("[offset:500]\n[00:10.00]<00:10.00>晚 <00:11.00>半秒")
+
+        val line = lyrics.lines[0]
+        assertEquals(10_500L, line.words[0].timeMs)
+        assertEquals(11_500L, line.words[1].timeMs)
+    }
 }

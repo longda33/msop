@@ -1,7 +1,18 @@
 package com.msop.player.feature.lyrics
 
+/**
+ * 逐字（卡拉OK）标签。Enhanced LRC 里形如 `<00:12.34>被`，
+ * [timeMs] 是这个词开始唱的时间点，[text] 是词本身。
+ * 没有逐字标签的普通 LRC 行，[LyricLine.words] 为空，退化为整行高亮。
+ */
+data class LyricWord(val timeMs: Long, val text: String)
+
 /** 一行歌词。[timeMs] 是这一行开始的时间点。 */
-data class LyricLine(val timeMs: Long, val text: String)
+data class LyricLine(
+    val timeMs: Long,
+    val text: String,
+    val words: List<LyricWord> = emptyList(),
+)
 
 /**
  * 一份解析好的歌词。

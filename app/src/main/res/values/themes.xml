@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Compose 应用不需要 AppCompat / Material Components 主题，
-         用平台主题即可避免引入 com.google.android.material 依赖。 -->
-    <style name="Theme.Msop" parent="android:Theme.Material.Light.NoActionBar" />
+         用平台深色主题即可避免引入 com.google.android.material 依赖。
+         深色父主题 + 深色 windowBackground，避免启动瞬间白屏闪烁（与 index.html 的深色 UI 一致）。 -->
+    <style name="Theme.Msop" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/msop_window_background</item>
+    </style>
 </resources>

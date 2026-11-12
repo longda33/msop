@@ -3,14 +3,19 @@ package com.msop.player.feature.lyrics
 /**
  * LRC 解析。
  *
- * 只做「时间轴 + 文本」，不认逐字标签（`<00:12.34>`）——那是 P5-01 之外的增强格式，
- * 先把逐行做扎实。解析失败不抛异常，返回空歌词，播放页退化成「暂无歌词」。
+ * 支持「逐行 + 逐字（卡拉OK）」两种时间轴：
+ * - 普通 LRC：`[01:23.45]歌词`，整行一个时间点，[LyricLine.words] 为空。
+ * - Enhanced LRC：`[01:23.45]<01:23.45>被 <01:24.10>命 <01:25.00>中`，行内每个词带 `<mm:ss.xx>`，
+ *   解析后 [LyricLine.words] 非空，播放页据此做 BetterLyrics 式逐字高亮。
+ *
+ * 解析失败不抛异常，返回空歌词，播放页退化成「暂无歌词」。
  *
  * 支持的写法：
  * - `[01:23.45]歌词`（百分秒）
  * - `[01:23.456]歌词`（毫秒）
  * - `[01:23]歌词`（整秒）
  * - `[00:10.00][00:20.00]歌词`（一行多个时间点，常见于副歌复用）
+ * - `<00:12.34>词`（逐字标签，可多个）
  * - `[offset:-500]`（整首偏移，单位毫秒）
  * - `[ti:]` / `[ar:]` / `[al:]` / `[by:]` 等元信息标签直接忽略
  */
@@ -18,6 +23,7 @@ object LrcParser {
 
     private val TIME_TAG = Regex("""\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?]""")
     private val OFFSET_TAG = Regex("""\[offset:\s*([+-]?\d+)\s*]""", RegexOption.IGNORE_CASE)
+    private val WORD_TAG = Regex("""<(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?>""")
     private val BOM = '\uFEFF'
 
     fun parse(raw: String): Lyrics {
@@ -28,16 +34,46 @@ object LrcParser {
 
         val lines = ArrayList<LyricLine>(64)
         for (rawLine in text.lineSequence()) {
-            val tags = TIME_TAG.findAll(rawLine).toList()
-            if (tags.isEmpty()) continue
+            val bracketTags = TIME_TAG.findAll(rawLine).toList()
+            if (bracketTags.isEmpty()) continue
 
             val content = TIME_TAG.replace(rawLine, "").trim()
             // 空文本行（间奏占位）不进列表：高亮落在空行上会像卡住了
             if (content.isEmpty()) continue
 
-            for (tag in tags) {
+            // 逐字标签：<mm:ss.xx>词。没有就整行退化。
+            val wordMatches = WORD_TAG.findAll(content).toList()
+            val words = if (wordMatches.isNotEmpty()) {
+                val parsed = ArrayList<LyricWord>(wordMatches.size)
+                wordMatches.forEach { m ->
+                    val t = parseTimeTag(m) ?: return@forEach
+                    val next = WORD_TAG.find(content, m.range.last + 1)
+                    val end = next?.range?.first ?: content.length
+                    val wtext = content.substring(m.range.last + 1, end).trim()
+                    if (wtext.isNotEmpty()) {
+                        parsed += LyricWord((t + offsetMs).coerceAtLeast(0L), wtext)
+                    }
+                }
+                // 首词之前若有前置文字（极少见），当作第一个词处理，避免丢字
+                val lead = content.substring(0, wordMatches.first().range.first).trim()
+                if (lead.isNotEmpty()) {
+                    listOf(LyricWord(parsed.firstOrNull()?.timeMs ?: 0L, lead)) + parsed
+                } else {
+                    parsed
+                }
+            } else {
+                emptyList()
+            }
+
+            val lineText = if (words.isNotEmpty()) words.joinToString(" ") { it.text } else content
+
+            for (tag in bracketTags) {
                 val timeMs = parseTimeTag(tag) ?: continue
-                lines += LyricLine((timeMs + offsetMs).coerceAtLeast(0L), content)
+                lines += LyricLine(
+                    (timeMs + offsetMs).coerceAtLeast(0L),
+                    lineText,
+                    if (words.isNotEmpty()) words.toList() else emptyList(),
+                )
             }
         }
 
