@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Primuse Lite · 界面预览（照搬成熟方案）</title>
+<title>msop · 界面预览（照搬成熟方案）</title>
 <style>
-/* ================= 令牌：全部取自 Primuse 实际界面 ================= */
+/* ================= 令牌：全部取自 msop 实际界面 ================= */
 :root{
-  --bg:#0A0A0C;          /* Primuse 主背景 */
+  --bg:#0A0A0C;          /* msop 主背景 */
   --sf:#141418;          /* 卡片/导航 */
   --sf2:#1B1B21;         /* 次级表面 */
   --sf3:#24242C;         /* 输入框/标签 */
@@ -15,7 +15,7 @@
   --tx:#FFFFFF;
   --tx2:rgba(255,255,255,.60);
   --tx3:rgba(255,255,255,.36);
-  --ac:#3D5AF1;          /* Primuse 蓝 */
+  --ac:#3D5AF1;          /* msop 蓝 */
   --ac2:#5B76FF;
   --acs:rgba(61,90,241,.18);
   --red:#F04A5C;
@@ -112,7 +112,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .bars i{width:2.5px;background:var(--ac2);border-radius:1px;display:block}
 .bars i:nth-child(1){height:6px}.bars i:nth-child(2){height:11px}.bars i:nth-child(3){height:8px}
 
-/* 封面渐变（深色系，Primuse 风格） */
+/* 封面渐变（深色系，msop 风格） */
 .cv1{background:radial-gradient(circle at 68% 26%,rgba(226,180,86,.7),transparent 52%),radial-gradient(circle at 26% 78%,rgba(48,92,190,.62),transparent 58%),linear-gradient(148deg,#060D22,#152746)}
 .cv2{background:repeating-linear-gradient(104deg,transparent 0 9px,rgba(255,200,150,.13) 9px 10px),radial-gradient(circle at 30% 26%,rgba(250,160,90,.62),transparent 52%),linear-gradient(150deg,#1A0A05,#4A1C0B)}
 .cv3{background:radial-gradient(ellipse 32% 20% at 50% 56%,transparent 58%,rgba(120,240,212,.5) 60%,rgba(120,240,212,.5) 63%,transparent 65%),radial-gradient(circle at 64% 72%,rgba(60,210,180,.5),transparent 54%),linear-gradient(142deg,#04181A,#0C3A3A)}
@@ -316,7 +316,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 <header class="top">
   <div class="top-in">
     <span class="logo"></span>
-    <span class="brand">Primuse Lite <small>界面预览 · 照搬成熟方案</small></span>
+    <span class="brand">msop <small>界面预览 · 照搬成熟方案</small></span>
     <nav>
       <a href="#phones">手机 8 屏</a>
       <a href="#tablets">平板 2 屏</a>
@@ -327,12 +327,12 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 <section class="hero">
   <div class="eyebrow">UI Preview · v2 · 2026-11-11</div>
   <h1>不猜，只搬<em>已经跑通的</em></h1>
-  <p class="lead">视觉语言全部取自 <b>Primuse</b> 实际界面；导航、列表、详情页、播放页的信息组织方式取自 <b>NeriPlayer</b> 与 <b>MusicFree</b> 这两个国内用户量最大的开源安卓音乐 App。每屏标注了出处，没有一处是拍脑袋。</p>
+  <p class="lead">视觉语言全部取自 <b>msop</b> 实际界面；导航、列表、详情页、播放页的信息组织方式取自 <b>NeriPlayer</b> 与 <b>MusicFree</b> 这两个国内用户量最大的开源安卓音乐 App。每屏标注了出处，没有一处是拍脑袋。</p>
 </section>
 
 <div class="srcs">
   <div class="src">
-    <h4>Primuse <span>视觉</span></h4>
+    <h4>msop <span>视觉</span></h4>
     <p>深色底 <b>#0A0A0C</b>、蓝色强调 <b>#3D5AF1</b>、胶囊选中态、细进度条、圆角封面、底部胶囊播放条。播放页大封面 + 灰阶文字层级，全部照搬。</p>
   </div>
   <div class="src">
@@ -352,7 +352,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 <div class="grid" id="grid-wide" style="grid-template-columns:1fr;gap:44px"></div>
 
 <div class="foot">
-  <b>为什么是深色</b>：Primuse 全平台（iOS / macOS / tvOS）都是深色为主，播放页恒定深色。这里不做「浅色浏览 + 深色播放」的双主题，直接一套深色，减少一套配色的维护成本，也更接近原版。<br>
+  <b>为什么是深色</b>：msop 全平台（iOS / macOS / tvOS）都是深色为主，播放页恒定深色。这里不做「浅色浏览 + 深色播放」的双主题，直接一套深色，减少一套配色的维护成本，也更接近原版。<br>
   <b>为什么是 3 Tab</b>：NeriPlayer 是「首页 / 探索 / 媒体库 / 设置」4 Tab，其中首页与探索服务于在线平台推荐。本项目只有本地 + OpenList 两种音源，没有推荐流，去掉这两个后剩下 <code>音乐库 / 搜索 / 设置</code>。<br>
   <b>平板断点</b>：最短边 ≥600dp 判平板；宽度 ≥840dp 切左侧导航栏 + 双栏，与 NeriPlayer 的规则一致。<br>
   <b>本文件独立</b>：放在 <code>preview/</code> 下，不改动项目任何代码与文档。
@@ -362,7 +362,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 <div id="defs" style="display:none">
 
 <!-- 01 音乐库 -->
-<section class="screen" data-id="lib" data-name="音乐库 · 歌曲" data-tag="Primuse + MusicFree">
+<section class="screen" data-id="lib" data-name="音乐库 · 歌曲" data-tag="msop + MusicFree">
 <div class="scr">
   <div class="sb"><span>9:41</span><span class="r"><svg><use href="#i-sig"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-bat"/></svg></span></div>
   <div class="hdr">
@@ -378,12 +378,12 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
   <div class="list">
     <div class="trow cur"><div class="cv cv1"></div><div class="tt"><b>晴天</b><i>周杰伦 · 叶惠美</i></div><span class="dur"><span class="bars"><i></i><i></i><i></i></span>4:29</span></div>
     <div class="trow"><div class="cv cv2"></div><div class="tt"><b>七里香</b><i>周杰伦 · 七里香</i></div><span class="dur">4:59</span><span class="more"><svg class="ic xs"><use href="#i-more"/></svg></span></div>
-    <div class="trow"><div class="cv cv3"></div><div class="tt"><b>A Different Skyline</b><i>Primuse Sessions · Blue Hour</i></div><span class="dur">3:52</span><span class="more"><svg class="ic xs"><use href="#i-more"/></svg></span></div>
-    <div class="trow"><div class="cv cv4"></div><div class="tt"><b>Silver Lines</b><i>Primuse Sessions · Blue Hour</i></div><span class="dur"><svg class="ic xs" style="color:var(--tx3)"><use href="#i-cloud"/></svg>4:07</span><span class="more"><svg class="ic xs"><use href="#i-more"/></svg></span></div>
+    <div class="trow"><div class="cv cv3"></div><div class="tt"><b>A Different Skyline</b><i>msop Sessions · Blue Hour</i></div><span class="dur">3:52</span><span class="more"><svg class="ic xs"><use href="#i-more"/></svg></span></div>
+    <div class="trow"><div class="cv cv4"></div><div class="tt"><b>Silver Lines</b><i>msop Sessions · Blue Hour</i></div><span class="dur"><svg class="ic xs" style="color:var(--tx3)"><use href="#i-cloud"/></svg>4:07</span><span class="more"><svg class="ic xs"><use href="#i-more"/></svg></span></div>
     <div class="trow"><div class="cv cv5"></div><div class="tt"><b>The Quiet Between</b><i>A Place to Begin</i></div><span class="dur">5:18</span><span class="more"><svg class="ic xs"><use href="#i-more"/></svg></span></div>
-    <div class="trow"><div class="cv cv6"></div><div class="tt"><b>Blue Hour</b><i>Primuse Sessions</i></div><span class="dur">3:26</span><span class="more"><svg class="ic xs"><use href="#i-more"/></svg></span></div>
-    <div class="trow"><div class="cv cv7"></div><div class="tt"><b>Room for the Night</b><i>Primuse Sessions</i></div><span class="dur">4:41</span><span class="more"><svg class="ic xs"><use href="#i-more"/></svg></span></div>
-    <div class="trow"><div class="cv cv8"></div><div class="tt"><b>Signals in Blue</b><i>Primuse Sessions</i></div><span class="dur">3:37</span><span class="more"><svg class="ic xs"><use href="#i-more"/></svg></span></div>
+    <div class="trow"><div class="cv cv6"></div><div class="tt"><b>Blue Hour</b><i>msop Sessions</i></div><span class="dur">3:26</span><span class="more"><svg class="ic xs"><use href="#i-more"/></svg></span></div>
+    <div class="trow"><div class="cv cv7"></div><div class="tt"><b>Room for the Night</b><i>msop Sessions</i></div><span class="dur">4:41</span><span class="more"><svg class="ic xs"><use href="#i-more"/></svg></span></div>
+    <div class="trow"><div class="cv cv8"></div><div class="tt"><b>Signals in Blue</b><i>msop Sessions</i></div><span class="dur">3:37</span><span class="more"><svg class="ic xs"><use href="#i-more"/></svg></span></div>
   </div>
   <div class="mini" data-goto="player"><div class="cv cv1"></div><div class="mt"><b>晴天</b><i>周杰伦 · 叶惠美</i></div><span class="pb"><svg class="ic s"><use href="#i-pause"/></svg></span><div class="pg"><i></i></div></div>
   <div class="bnav">
@@ -395,7 +395,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 </section>
 
 <!-- 02 专辑 -->
-<section class="screen" data-id="album" data-name="音乐库 · 专辑" data-tag="Primuse">
+<section class="screen" data-id="album" data-name="音乐库 · 专辑" data-tag="msop">
 <div class="scr">
   <div class="sb"><span>9:41</span><span class="r"><svg><use href="#i-sig"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-bat"/></svg></span></div>
   <div class="hdr">
@@ -405,8 +405,8 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
   <div style="flex:1;overflow:hidden;padding:14px 16px 0;display:grid;grid-template-columns:1fr 1fr;gap:16px 13px;align-content:start">
     <div><div class="cv cv1" style="aspect-ratio:1;border-radius:12px"></div><b style="display:block;font-size:13.5px;font-weight:550;margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">叶惠美</b><i style="display:block;font-size:11px;font-style:normal;color:var(--tx3);margin-top:2px">周杰伦 · 11 首</i></div>
     <div><div class="cv cv2" style="aspect-ratio:1;border-radius:12px"></div><b style="display:block;font-size:13.5px;font-weight:550;margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">七里香</b><i style="display:block;font-size:11px;font-style:normal;color:var(--tx3);margin-top:2px">周杰伦 · 10 首</i></div>
-    <div><div class="cv cv3" style="aspect-ratio:1;border-radius:12px"></div><b style="display:block;font-size:13.5px;font-weight:550;margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Blue Hour</b><i style="display:block;font-size:11px;font-style:normal;color:var(--tx3);margin-top:2px">Primuse Sessions · 8 首</i></div>
-    <div><div class="cv cv4" style="aspect-ratio:1;border-radius:12px"></div><b style="display:block;font-size:13.5px;font-weight:550;margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">A Place to Begin</b><i style="display:block;font-size:11px;font-style:normal;color:var(--tx3);margin-top:2px">Primuse Sessions · 6 首</i></div>
+    <div><div class="cv cv3" style="aspect-ratio:1;border-radius:12px"></div><b style="display:block;font-size:13.5px;font-weight:550;margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Blue Hour</b><i style="display:block;font-size:11px;font-style:normal;color:var(--tx3);margin-top:2px">msop Sessions · 8 首</i></div>
+    <div><div class="cv cv4" style="aspect-ratio:1;border-radius:12px"></div><b style="display:block;font-size:13.5px;font-weight:550;margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">A Place to Begin</b><i style="display:block;font-size:11px;font-style:normal;color:var(--tx3);margin-top:2px">msop Sessions · 6 首</i></div>
     <div><div class="cv cv5" style="aspect-ratio:1;border-radius:12px"></div><b style="display:block;font-size:13.5px;font-weight:550;margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Acoustic</b><i style="display:block;font-size:11px;font-style:normal;color:var(--tx3);margin-top:2px">Various · 14 首</i></div>
     <div><div class="cv cv6" style="aspect-ratio:1;border-radius:12px"></div><b style="display:block;font-size:13.5px;font-weight:550;margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">八度空间</b><i style="display:block;font-size:11px;font-style:normal;color:var(--tx3);margin-top:2px">周杰伦 · 10 首</i></div>
   </div>
@@ -420,7 +420,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 </section>
 
 <!-- 03 播放页 -->
-<section class="screen" data-id="player" data-name="播放页 · 封面" data-tag="Primuse + NeriPlayer">
+<section class="screen" data-id="player" data-name="播放页 · 封面" data-tag="msop + NeriPlayer">
 <div class="scr">
   <div class="sb"><span>9:41</span><span class="r"><svg><use href="#i-sig"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-bat"/></svg></span></div>
   <div class="pstage">
@@ -456,7 +456,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 </section>
 
 <!-- 04 歌词 -->
-<section class="screen" data-id="lyrics" data-name="播放页 · 歌词" data-tag="Primuse">
+<section class="screen" data-id="lyrics" data-name="播放页 · 歌词" data-tag="msop">
 <div class="scr">
   <div class="sb"><span>9:41</span><span class="r"><svg><use href="#i-sig"/></svg><svg><use href="#i-wifi"/></svg><svg><use href="#i-bat"/></svg></span></div>
   <div class="pstage">
@@ -508,12 +508,12 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
       <div style="flex:1;overflow:hidden">
         <div class="qrow cur"><span class="n">01</span><div class="tt"><b>晴天</b><i>周杰伦 · 叶惠美</i></div><svg class="ic s dh"><use href="#i-drag"/></svg></div>
         <div class="qrow"><span class="n">02</span><div class="tt"><b>七里香</b><i>周杰伦 · 七里香</i></div><svg class="ic s dh"><use href="#i-drag"/></svg></div>
-        <div class="qrow"><span class="n">03</span><div class="tt"><b>A Different Skyline</b><i>Primuse Sessions</i></div><svg class="ic s dh"><use href="#i-drag"/></svg></div>
-        <div class="qrow"><span class="n">04</span><div class="tt"><b>Silver Lines</b><i>Primuse Sessions</i></div><svg class="ic s dh"><use href="#i-drag"/></svg></div>
+        <div class="qrow"><span class="n">03</span><div class="tt"><b>A Different Skyline</b><i>msop Sessions</i></div><svg class="ic s dh"><use href="#i-drag"/></svg></div>
+        <div class="qrow"><span class="n">04</span><div class="tt"><b>Silver Lines</b><i>msop Sessions</i></div><svg class="ic s dh"><use href="#i-drag"/></svg></div>
         <div class="qrow"><span class="n">05</span><div class="tt"><b>The Quiet Between</b><i>A Place to Begin</i></div><svg class="ic s dh"><use href="#i-drag"/></svg></div>
-        <div class="qrow"><span class="n">06</span><div class="tt"><b>Blue Hour</b><i>Primuse Sessions</i></div><svg class="ic s dh"><use href="#i-drag"/></svg></div>
-        <div class="qrow"><span class="n">07</span><div class="tt"><b>Room for the Night</b><i>Primuse Sessions</i></div><svg class="ic s dh"><use href="#i-drag"/></svg></div>
-        <div class="qrow"><span class="n">08</span><div class="tt"><b>Signals in Blue</b><i>Primuse Sessions</i></div><svg class="ic s dh"><use href="#i-drag"/></svg></div>
+        <div class="qrow"><span class="n">06</span><div class="tt"><b>Blue Hour</b><i>msop Sessions</i></div><svg class="ic s dh"><use href="#i-drag"/></svg></div>
+        <div class="qrow"><span class="n">07</span><div class="tt"><b>Room for the Night</b><i>msop Sessions</i></div><svg class="ic s dh"><use href="#i-drag"/></svg></div>
+        <div class="qrow"><span class="n">08</span><div class="tt"><b>Signals in Blue</b><i>msop Sessions</i></div><svg class="ic s dh"><use href="#i-drag"/></svg></div>
         <div class="qrow"><span class="n">09</span><div class="tt"><b>以父之名</b><i>周杰伦 · 叶惠美</i></div><svg class="ic s dh"><use href="#i-drag"/></svg></div>
       </div>
       <div style="flex:none;height:32px;display:grid;place-items:center"><span data-goto="player" style="width:96px;height:4px;border-radius:2px;background:rgba(255,255,255,.16);display:block"></span></div>
@@ -531,22 +531,22 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
   <div class="sect">
     <div class="sh"><b>最近搜索</b><span>清空</span></div>
     <div class="hist">
-      <span class="chip">周杰伦</span><span class="chip">Blue Hour</span><span class="chip">Primuse Sessions</span><span class="chip">晴天</span>
+      <span class="chip">周杰伦</span><span class="chip">Blue Hour</span><span class="chip">msop Sessions</span><span class="chip">晴天</span>
     </div>
   </div>
   <div class="sect">
     <div class="sh"><b>最近播放</b><span>全部 20</span></div>
     <div class="hcards">
       <div class="hcard"><div class="cv cv1"></div><b>晴天</b><i>周杰伦</i></div>
-      <div class="hcard"><div class="cv cv3"></div><b>Blue Hour</b><i>Primuse Sessions</i></div>
-      <div class="hcard"><div class="cv cv4"></div><b>Silver Lines</b><i>Primuse Sessions</i></div>
+      <div class="hcard"><div class="cv cv3"></div><b>Blue Hour</b><i>msop Sessions</i></div>
+      <div class="hcard"><div class="cv cv4"></div><b>Silver Lines</b><i>msop Sessions</i></div>
     </div>
   </div>
   <div class="sect">
     <div class="sh"><b>最近添加</b></div>
     <div class="trow" style="padding-left:0;padding-right:0"><div class="cv cv6"></div><div class="tt"><b>八度空间</b><i>周杰伦 · 10 首 · 昨天</i></div><span class="dur">10 首</span></div>
     <div class="trow" style="padding-left:0;padding-right:0"><div class="cv cv5"></div><div class="tt"><b>Acoustic</b><i>Various · 14 首 · 3 天前</i></div><span class="dur">14 首</span></div>
-    <div class="trow" style="padding-left:0;padding-right:0"><div class="cv cv7"></div><div class="tt"><b>Room for the Night</b><i>Primuse Sessions · 单曲</i></div><span class="dur">4:41</span></div>
+    <div class="trow" style="padding-left:0;padding-right:0"><div class="cv cv7"></div><div class="tt"><b>Room for the Night</b><i>msop Sessions · 单曲</i></div><span class="dur">4:41</span></div>
   </div>
   <div class="mini" data-goto="player"><div class="cv cv1"></div><div class="mt"><b>晴天</b><i>周杰伦 · 叶惠美</i></div><span class="pb"><svg class="ic s"><use href="#i-pause"/></svg></span><div class="pg"><i></i></div></div>
   <div class="bnav">
@@ -745,7 +745,7 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
   }
 
   function rows(n){
-    var names = [['晴天','周杰伦 · 叶惠美','4:29',1],['七里香','周杰伦 · 七里香','4:59',0],['A Different Skyline','Primuse Sessions','3:52',0],['Silver Lines','Primuse Sessions','4:07',0],['The Quiet Between','A Place to Begin','5:18',0],['Blue Hour','Primuse Sessions','3:26',0],['Room for the Night','Primuse Sessions','4:41',0],['Signals in Blue','Primuse Sessions','3:37',0]];
+    var names = [['晴天','周杰伦 · 叶惠美','4:29',1],['七里香','周杰伦 · 七里香','4:59',0],['A Different Skyline','msop Sessions','3:52',0],['Silver Lines','msop Sessions','4:07',0],['The Quiet Between','A Place to Begin','5:18',0],['Blue Hour','msop Sessions','3:26',0],['Room for the Night','msop Sessions','4:41',0],['Signals in Blue','msop Sessions','3:37',0]];
     var cvs=['cv1','cv2','cv3','cv4','cv5','cv6','cv7','cv8'];
     return names.slice(0,n).map(function(x,i){
       return '<div class="trow'+(x[3]?' cur':'')+'" style="height:58px;padding:0 20px"><div class="cv '+cvs[i]+'" style="width:40px;height:40px"></div>' +

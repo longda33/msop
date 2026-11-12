@@ -10,25 +10,25 @@
 # --- kotlinx.serialization（最高风险） ---
 # ApiEnvelope<T> / FsItem / FsListData 的 $$serializer 由编译器插件生成，
 # R8 看不到任何静态引用，删掉后运行时会报 "Serializer for class ... is not found"。
--keep class com.primuse.lite.core.network.** { *; }
--keep class com.primuse.lite.core.model.** { *; }
+-keep class com.msop.player.core.network.** { *; }
+-keep class com.msop.player.core.model.** { *; }
 -keepclassmembers class kotlinx.serialization.json.** {
     *** Companion;
     *** INSTANCE;
 }
--keepclasseswithmembers class com.primuse.lite.core.network.** {
+-keepclasseswithmembers class com.msop.player.core.network.** {
     kotlinx.serialization.KSerializer serializer(...);
 }
--keepclassmembers class com.primuse.lite.core.network.** {
+-keepclassmembers class com.msop.player.core.network.** {
     *** Companion;
     kotlinx.serialization.KSerializer serializer(...);
 }
--keep,includedescriptorclasses class com.primuse.lite.core.network.**$$serializer { *; }
+-keep,includedescriptorclasses class com.msop.player.core.network.**$$serializer { *; }
 -dontnote kotlinx.serialization.**
 
 # --- Room ---
 # 实体字段被 KSP 生成的 DAO 实现按名访问；实体与数据库子类都保留原名。
--keep class com.primuse.lite.core.database.entity.** { *; }
+-keep class com.msop.player.core.database.entity.** { *; }
 -keep class * extends androidx.room.RoomDatabase { *; }
 -dontwarn androidx.room.paging.**
 
@@ -37,10 +37,10 @@
 -keep class javax.inject.** { *; }
 
 # --- manifest 组件与 WorkManager Worker（系统按类名反射创建） ---
--keep class com.primuse.lite.PrimuseApplication { *; }
--keep class com.primuse.lite.MainActivity { *; }
--keep class com.primuse.lite.feature.player.PlaybackService { *; }
--keep class com.primuse.lite.feature.local.work.LocalScanWorker { *; }
+-keep class com.msop.player.MsopApplication { *; }
+-keep class com.msop.player.MainActivity { *; }
+-keep class com.msop.player.feature.player.PlaybackService { *; }
+-keep class com.msop.player.feature.local.work.LocalScanWorker { *; }
 
 # --- Media3 ---
 # MediaSessionService 由系统按 intent-filter 启动；session 包整体保留，

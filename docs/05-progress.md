@@ -19,9 +19,9 @@
 ## 日志
 
 ### 2026-11-10 · P0-00 · 项目立项，文档与任务表就绪
-- 做了什么：完成 GitHub 实测调研（Primuse / NeriPlayer / Auxio / OuterTune / RetroMusic / dav4jvm / OpenList），确定技术栈与 OpenList 对接通道，建立 7 阶段 35 任务的分段任务表与模型交接契约。
-- 改了哪些文件：新建 `primuse-android/` 下 `README.md`、`AGENTS.md`、`TASKS.md`、`docs/01–05`。
-- 验证方式：GitHub API 实采数据，见 `docs/01` 第五节复查命令。
+- 做了什么：完成 GitHub 实测调研（原参考项目 / NeriPlayer / Auxio / OuterTune / RetroMusic / dav4jvm / OpenList），确定技术栈与 OpenList 对接通道，建立 7 阶段 35 任务的分段任务表与模型交接契约。
+- 改了哪些文件：新建 `msop-android/` 下 `README.md`、`AGENTS.md`、`TASKS.md`、`docs/01–05`（01 后续已删除）。
+- 验证方式：GitHub API 实采数据，见 `docs/01` 第五节复查命令（该文档后续已删除）。
 - 遗留问题：
   1. OpenList 的 Subsonic 挂载路径与接口完整度**尚未实测**，是 P3-01 的首要工作。
   2. 用户尚未提供本机音乐目录位置与 OpenList 部署方式（局域网/公网），P1-04 与 P3-06 开工前需要确认。
@@ -51,7 +51,7 @@
 - 做了什么：按 AGP 9.5.1 + 内置 Kotlin 的新规范搭出完整多模块工程，含 1 个 app 模块与 11 个 library 模块、Compose 三 Tab 空壳、Hilt 装配。所有依赖版本从 Google Maven / Maven Central 实采。
 - 改了哪些文件：
   - 构建：`settings.gradle.kts`、`build.gradle.kts`、`gradle.properties`、`gradle/libs.versions.toml`、`gradle/wrapper/*`、`gradlew`、`gradlew.bat`、`local.properties.example`、`.gitignore`
-  - app：`app/build.gradle.kts`、`app/proguard-rules.pro`、`AndroidManifest.xml`、`res/values/{strings,themes}.xml`、`PrimuseApplication.kt`、`MainActivity.kt`、`ui/PrimuseApp.kt`、`ui/theme/Theme.kt`
+  - app：`app/build.gradle.kts`、`app/proguard-rules.pro`、`AndroidManifest.xml`、`res/values/{strings,themes}.xml`、`MsopApplication.kt`、`MainActivity.kt`、`ui/MsopApp.kt`、`ui/theme/Theme.kt`
   - 11 个库模块：`core/{model,common,database,network,datastore}`、`feature/{local,remote,player,library,lyrics,settings}`，各含 `build.gradle.kts` + `ModuleMarker.kt`
   - 新增 `BUILD-NOTES.md`
 - 验证方式：**未验证**。生成环境无 JDK / Gradle / Android SDK，无法执行 `assembleDebug`。已把 P0-01～03 标记为 `[?]`（已实现待验证）。
@@ -61,13 +61,13 @@
 - 给下一位的提醒：**不要在没有跑通构建前就往下写 P1**。骨架没验证，后面所有代码都建立在未验证的地基上。先让它 `assembleDebug` 通过、装上真机看到三个 Tab，再动 P1。
 
 ### 2026-11-10 · P0-00d · 撤销误写的 UI 代码，补充还原度评估
-- 做了什么：用户指出「UI 没有确定，不要写」。已删除 `feature/library/ui/` 下两个界面文件，并把三个 feature 模块的 build 文件还原为不含 Compose 的纯 library 模板。工程回到「UI 零代码」状态。同时基于 Primuse 源码与官方截图完成 UI 还原度评估。
+- 做了什么：用户指出「UI 没有确定，不要写」。已删除 `feature/library/ui/` 下两个界面文件，并把三个 feature 模块的 build 文件还原为不含 Compose 的纯 library 模板。工程回到「UI 零代码」状态。同时基于原参考项目的源码与截图完成 UI 还原度评估。
 - 改了哪些文件：
   - 删除：`feature/library/.../ui/LibraryScreen.kt`、`MockLibraryData.kt`
   - 还原：`feature/{library,player,settings}/build.gradle.kts`
-  - 重写：`docs/06-ui-spec.md` §8（待确认 Q1–Q4）、§9（还原度评估）
+  - 重写：`docs/06-ui-spec.md` §8（待确认 Q1–Q4）、§9（还原度评估）（该文档后续已删除）
   - `AGENTS.md`：决策表移除 D13–D15，改为「UI 全部未定」；禁止事项新增「UI 未确认前不写界面代码」
-  - 新增：`docs/reference/primuse-ios/` 四张官方截图
+  - 新增：`docs/reference/reference-ios/` 四张官方截图（后续已删除）
 - 验证方式：`find` 确认工程内无 `*Screen*.kt` / `*Player*.kt` / `*Mock*.kt`。
 - 遗留问题：UI 路线（像素级复刻 vs 保留视觉语言 + Material 3）未定，这是工作量差 2 倍的分叉点。
 - 给下一位的提醒：**UI 未定不等于不能干活**。P1 的扫描入库、P2 的播放内核、P3 的 Subsonic 客户端都与 UI 无关，可以先做。只有 `feature/*/ui/` 下的东西要等。
@@ -96,7 +96,7 @@
      }
      ```
   3. **图标弃用警告** — `Icons.Filled.List` → `Icons.AutoMirrored.Filled.List`，警告消失。
-- 改了哪些文件：`app/build.gradle.kts`（testOptions + androidComponents）、`app/src/main/java/.../ui/PrimuseApp.kt`（图标）、`.gitignore`（加 `*.log`）、`TASKS.md`、`AGENTS.md` §2
+- 改了哪些文件：`app/build.gradle.kts`（testOptions + androidComponents）、`app/src/main/java/.../ui/MsopApp.kt`（图标）、`.gitignore`（加 `*.log`）、`TASKS.md`、`AGENTS.md` §2
 - 验证方式：
   - `./gradlew tasks` → **BUILD SUCCESSFUL in 30s**
   - `./gradlew :app:assembleDebug` → **BUILD SUCCESSFUL in 1m**，无 `w:` 警告，APK 12 MB（10:13 重新产出）
@@ -106,15 +106,15 @@
 
 ### 2026-11-11 · P0-04 + P1-02 · 日志/崩溃捕获 + Room 数据层
 - 做了什么：
-  1. **P0-04**：`core:common` 增加 `AppLog`（统一 TAG `PrimuseLite`）与 `CrashReporter`（记录后交回系统默认处理，不吞异常），`PrimuseApplication` 在 `onCreate` 安装。
-  2. **P1-02**：`core:database` 落地 Room——`TrackEntity`（17 字段 / 4 索引）、`TrackDao`（Flow 观察 + Upsert + 增量扫描用的 `latestModified`）、`PrimuseDatabase`、`Converters`、`TrackMapper`，并配 `room.schemaLocation` 导出 schema。
+  1. **P0-04**：`core:common` 增加 `AppLog`（统一 TAG `Msop`）与 `CrashReporter`（记录后交回系统默认处理，不吞异常），`MsopApplication` 在 `onCreate` 安装。
+  2. **P1-02**：`core:database` 落地 Room——`TrackEntity`（17 字段 / 4 索引）、`TrackDao`（Flow 观察 + Upsert + 增量扫描用的 `latestModified`）、`MsopDatabase`、`Converters`、`TrackMapper`，并配 `room.schemaLocation` 导出 schema。
   3. 补 `TrackMapperTest` 4 个纯 JVM 单测（本地/远程/来源类型/可空字段往返），让 `./gradlew test` 真正有东西可跑。
   4. 新增 `.gitattributes` 固定换行符，避免 `gradlew` 在非 Windows 环境被 CRLF 破坏。
 - 改了哪些文件：
   - 新增：`core/common/.../log/AppLog.kt`、`core/common/.../crash/CrashReporter.kt`
-  - 新增：`core/database/.../entity/TrackEntity.kt`、`dao/TrackDao.kt`、`PrimuseDatabase.kt`、`Converters.kt`、`mapper/TrackMapper.kt`、`src/test/.../TrackMapperTest.kt`
+  - 新增：`core/database/.../entity/TrackEntity.kt`、`dao/TrackDao.kt`、`MsopDatabase.kt`、`Converters.kt`、`mapper/TrackMapper.kt`、`src/test/.../TrackMapperTest.kt`
   - 新增：`core/database/schemas/.../1.json`（自动生成，入库）
-  - 修改：`PrimuseApplication.kt`、`core/database/build.gradle.kts`（ksp + room + junit）、`gradle/libs.versions.toml`（junit 4.13.2）、`.gitattributes`
+  - 修改：`MsopApplication.kt`、`core/database/build.gradle.kts`（ksp + room + junit）、`gradle/libs.versions.toml`（junit 4.13.2）、`.gitattributes`
 - 验证方式：
   - `./gradlew :core:database:assembleDebug` → **BUILD SUCCESSFUL in 7m44s**（KSP 编译期校验 DAO 的 SQL 语法与实体映射）
   - schema 导出确认：`tracks` 表 17 字段、4 个索引（source/album/artist/lastModified）、主键 `id`
@@ -156,13 +156,13 @@
 ### 2026-11-11 · P1-08 · Hilt + WorkManager 接线，扫描可从 App 触发
 - 做了什么：把 P1-03 的扫描逻辑真正接进 App——Hilt 提供依赖、WorkManager 调度、通知显示进度、启动时自动触发一次增量扫描。
 - 新增文件：
-  - `core/database/.../di/DatabaseModule.kt` — 提供 `PrimuseDatabase`（`fallbackToDestructiveMigration`）与 `TrackDao`
+  - `core/database/.../di/DatabaseModule.kt` — 提供 `MsopDatabase`（`fallbackToDestructiveMigration`）与 `TrackDao`
   - `feature/local/.../di/LocalModule.kt` — 提供 `TrackPageSource` / `LocalTrackStore` / `LocalLibrarySyncer`
   - `feature/local/.../work/LocalScanWorker.kt` — `@HiltWorker` CoroutineWorker，失败重试上限 3 次
   - `feature/local/.../work/ScanNotifier.kt` — 进度/完成/失败通知，含 Android 13+ 通知权限判断
   - `feature/local/.../work/LocalScanScheduler.kt` — `enqueueUniqueWork + KEEP`，避免叠加任务
   - `feature/local/src/main/res/` — 通知渠道文案与 `ic_scan.xml` 图标
-  - 修改：`LocalLibrarySyncer.sync` 增加 `onProgress` 回调；`PrimuseApplication` 实现 `Configuration.Provider`；`MainActivity` 启动时按权限触发扫描；`AndroidManifest` 移除 WorkManager 默认初始化
+  - 修改：`LocalLibrarySyncer.sync` 增加 `onProgress` 回调；`MsopApplication` 实现 `Configuration.Provider`；`MainActivity` 启动时按权限触发扫描；`AndroidManifest` 移除 WorkManager 默认初始化
 - 关键技术决策：
   1. **不用前台服务，用普通通知** — 扫描幂等（确定性 ID upsert），被杀重跑无副作用，不值得为它申请 `FOREGROUND_SERVICE_DATA_SYNC` 并承担 Android 14+ 的类型声明成本
   2. **`onProgress` 必须是 suspend lambda** — 普通 lambda 里不能调 `setProgress()`（挂起函数）
@@ -177,7 +177,7 @@
   1. **进度与恢复未在真机验证**——「杀进程后任务可恢复」「进度条实时」都需要设备。
   2. **没有权限申请 UI**（P1-04 未做），首次启动会走「跳过自动扫描」分支并打日志，实际扫不到任何东西。
   3. `ScanNotifier` 与 `LocalScanWorker` 无单测（依赖 Android 运行时）。
-- 给下一位的提醒：想真机验证这条链路，需要先装模拟器，然后手动授权 `READ_MEDIA_AUDIO`（或先在 P1-04 把申请流程做出来），再 `adb logcat -s PrimuseLite:V` 看「已排入扫描任务」→「本地库同步开始/结束」两对日志。若看到 `WorkerFactory` 相关异常，说明 manifest 的 initializer 移除没生效。
+- 给下一位的提醒：想真机验证这条链路，需要先装模拟器，然后手动授权 `READ_MEDIA_AUDIO`（或先在 P1-04 把申请流程做出来），再 `adb logcat -s Msop:V` 看「已排入扫描任务」→「本地库同步开始/结束」两对日志。若看到 `WorkerFactory` 相关异常，说明 manifest 的 initializer 移除没生效。
 
 ### 2026-11-11 · P1-04 · 权限申请与门禁（逻辑完成，真机流程待验证）
 - 做了什么：把音频权限的申请、拒绝处理、永久拒绝引导全部做完，并接成 App 启动门禁。扫描现在只有在授权后才会触发。
@@ -185,7 +185,7 @@
   - `feature/local/.../permission/AudioPermission.kt` — 重写。新增 `PermissionUiState` 四态、`requestable()`、`hasAskedBefore/markAsked`（SharedPreferences）、纯函数 `resolvePermissionState`
   - `feature/local/src/test/.../PermissionStateTest.kt` — 6 个单测覆盖四态判定
   - `app/.../ui/permission/AudioPermissionGate.kt` — Compose 门禁，含请求、去设置、回前台重判
-  - `app/.../MainActivity.kt` — 用门禁包裹 `PrimuseApp`，授权后才触发扫描（`scanTriggered` 防重复）
+  - `app/.../MainActivity.kt` — 用门禁包裹 `MsopApp`，授权后才触发扫描（`scanTriggered` 防重复）
 - 关键决策：
   1. **权限判定做成纯函数** `resolvePermissionState(granted, shouldShowRationale, askedBefore)` — Android 的三态判断很绕，抽出来后能在无设备环境完整单测
   2. **区分「可再问」与「永久拒绝」** — 前者还能弹系统对话框，后者只能跳设置页。混为一谈会让用户点了按钮没反应
@@ -200,7 +200,7 @@
   1. **真机流程未验证**：拒绝一次能否再弹、永久拒绝是否跳设置、从设置返回后是否自动放行——三条都要设备。
   2. 门禁界面是临时的，UI 定稿后要重做。
   3. SAF 目录授权（`ACTION_OPEN_DOCUMENT_TREE`）仍未实现，属 P1-05。
-- 给下一位的提醒：**测试权限流程要准备一个干净的模拟器**。`askedBefore` 存在 SharedPreferences 里，反复测试时记得清数据（`adb shell pm clear com.primuse.lite`），否则会一直走「永久拒绝」分支，看起来像 bug。
+- 给下一位的提醒：**测试权限流程要准备一个干净的模拟器**。`askedBefore` 存在 SharedPreferences 里，反复测试时记得清数据（`adb shell pm clear com.msop.player`），否则会一直走「永久拒绝」分支，看起来像 bug。
 
 ### 2026-11-11 · 真机验证 · 首次在设备上跑通全链路，修掉一个真 bug
 - 设备：**OPPO PJB110，Android 12（API 32），1280×720 横屏**，通过 `adb connect 127.0.0.1:5555` 连接（另有 `:16384` 与 `emulator-5554` 两个 transport 指向同一台）。
@@ -217,10 +217,10 @@
 - **发现并修复的真 bug**：MediaStore 用字面量 `<unknown>` 表示缺失标签，而不是 NULL。第一轮入库后数据库里 artist 字段是字符串 `<unknown>`，直接显示到 UI 会很怪。
   - 修复：`MediaStoreTrackSource` 增加 `String?.clean()`，把 `<unknown>`、空白、null 统一转 null
   - 回归测试：`MediaStoreStringCleanTest` 4 个用例
-  - 修复后真机确认：`track01|<NULL>|PrimuseTest|3000`
+  - 修复后真机确认：`track01|<NULL>|MsopTest|3000`
 - 关键技术细节（下次调试直接用）：
   - **媒体库扫描**：Android 11+ 已废弃 `MEDIA_SCANNER_SCAN_FILE` 广播（`result=0` 无人接收）；`content call --method scan_file` 返回 `STREAM=null` 也无效；**唯一可用的是** `adb shell content call --uri content://media --method scan_volume --arg external_primary`
-  - **数据库检查**：`adb shell run-as com.primuse.lite sqlite3 databases/primuse-lite.db "..."`
+  - **数据库检查**：`adb shell run-as com.msop.player sqlite3 databases/msop.db "..."`
   - **截图**：Git Bash 会把 `/sdcard/x.png` 当本地路径，必须 `export MSYS_NO_PATHCONV=1`
   - **ADB 连接**：每次 Bash 调用结束后 adb daemon 会随 shell 退出被杀，必须每次重新 `adb start-server && adb connect`
 - 验证方式：
@@ -240,7 +240,7 @@
   - `ScanContract`：`LocalTrackStore` 增加 `deleteByIds`，`ScanStats` 增加 `deleted` 字段
   - `RoomLocalTrackStore`：`allIds()` 改为**只返回 LOCAL 来源**
   - `LocalLibrarySyncer`：全量扫描后做差集清理，增量扫描不清理
-  - `PrimuseApp` / `MainActivity`：设置占位页加「重新扫描曲库」按钮（临时入口）
+  - `MsopApp` / `MainActivity`：设置占位页加「重新扫描曲库」按钮（临时入口）
   - 单测：新增 4 个删除相关用例
 - 关键决策：
   1. **只有全量扫描才清理** —— 增量扫描看不到未变更文件，据此清理会把整个曲库误删
@@ -266,7 +266,7 @@
   - `saf/SafPaths.kt` — `documentIdToAbsolutePath()`，把 `primary:Music/x.flac` 还原成绝对路径
   - `saf/SafTrackSource.kt` — BFS 遍历目录树，`ContentResolver.query(childrenUri)` 批量取一层
   - `scan/CompositeTrackSource.kt` — 串联多个来源
-  - `LocalModule` 改为提供组合来源；`PrimuseApp` / `MainActivity` 加「添加音乐目录」入口
+  - `LocalModule` 改为提供组合来源；`MsopApp` / `MainActivity` 加「添加音乐目录」入口
   - 单测：`SafPathsTest`（7）、`CompositeTrackSourceTest`（5）
 - **真机抓到的设计缺陷（重要）**：
   - 第一版把 MediaStore 放前面、SAF 放后面。结果 SAF 那份「只有路径、无 album、时长 0」的记录把 MediaStore 的丰富元数据**覆盖**了：
@@ -276,7 +276,7 @@
     ```
   - 根因：`CompositeTrackSource` 按顺序发出，后写入者覆盖前者，而我把**信息更少**的来源放在了最后。
   - 修复：顺序改为 **SAF 在前、MediaStore 在后**，并补了 `CompositeTrackSourceTest` 固定这个约束（含一个「顺序反过来会退化」的反向用例）。
-  - 修复后：`track01|PrimuseTest|3000`、`bulk0000|bulk|50`，元数据恢复。
+  - 修复后：`track01|MsopTest|3000`、`bulk0000|bulk|50`，元数据恢复。
 - 关键技术点：
   1. **不用 `DocumentFile.listFiles()`** —— 逐层 IPC，几万文件要几分钟。直接对 children URI 做 `query`，一次拿一层全部子项。
   2. **BFS + 显式队列** —— 深目录递归会爆栈。
@@ -285,7 +285,7 @@
 - 验证方式：
   - `./gradlew test` → feature:local **41 个测试全过**
   - 真机：设置页「添加音乐目录」→ 系统选择器选 Music → 授权弹窗允许 → 自动全量重扫
-  - 持久化：`shared_prefs/primuse_saf_dirs.xml` 确认存了 tree URI；force-stop 重启后全量扫描仍读到 1006 条
+  - 持久化：`shared_prefs/reference_saf_dirs.xml` 确认存了 tree URI；force-stop 重启后全量扫描仍读到 1006 条
   - 性能：503 个 SAF 文件遍历 878ms（外推 1 万约 18s，目标 40s）
 - 遗留问题：
   1. **同一目录被重复添加**不会去重（Set 去重了，但用户看不出来）；也没有「移除目录」的入口。
@@ -299,7 +299,7 @@
   1. **P1-06**：去重计数从「批内」改成「全程」。原来同一文件被 SAF 与 MediaStore 各返回一次时落在不同页/不同来源，`deduped` 永远是 0，日志看起来像「扫描 1006 写入 1006」，实际库里只有 503 条。
   2. **P1-07**：新增 `feature/local/metadata/`，用 `MediaMetadataRetriever` 补标签、按内容哈希把内嵌封面落盘、`coverUri` 回写数据库；全量扫描后回收没人引用的封面。
 - 新增文件：`metadata/TrackMetadata.kt`、`MetadataValues.kt`、`MetadataMerge.kt`、`MetadataReader.kt`、`CoverCache.kt`、`MetadataStore.kt`、`RoomMetadataStore.kt`、`CoverProvider.kt`、`LocalMetadataEnricher.kt`、`scan/ScanMerge.kt`
-- 改动的文件：`LocalLibrarySyncer`（全程去重 + written 语义）、`RoomLocalTrackStore`（入库前合并）、`TrackDao`（4 个查询）、`LocalScanWorker`（扫描后补齐 + 回收）、`LocalScanScheduler`（全量用 REPLACE）、`ScanNotifier` + `strings.xml`、`LocalModule`（装配）、`PrimuseApp` / `MainActivity`（临时「预热封面」入口）
+- 改动的文件：`LocalLibrarySyncer`（全程去重 + written 语义）、`RoomLocalTrackStore`（入库前合并）、`TrackDao`（4 个查询）、`LocalScanWorker`（扫描后补齐 + 回收）、`LocalScanScheduler`（全量用 REPLACE）、`ScanNotifier` + `strings.xml`、`LocalModule`（装配）、`MsopApp` / `MainActivity`（临时「预热封面」入口）
 
 - **真机抓到的真 bug（重要）**：重扫会把封面和 SAF 标签一起抹掉。
   - 现象：预热封面后 `coverUri` 有值，点「重新扫描曲库」→ 504 行全部变回 `coverUri=NULL`，缓存文件被当成孤儿删掉，等于白提。
@@ -318,7 +318,7 @@
 - 验证方式（全部真机，OPPO PJB110 / Android 12）：
   - `./gradlew test` → **86 个测试，0 失败**（新增 31 个：`MetadataValuesTest` 7、`MetadataMergeTest` 6、`CoverCacheTest` 9、`LocalMetadataEnricherTest` 10、`ScanMergeTest` 6、`LocalLibrarySyncerTest` +3）
   - **去重可观测**：全量 `扫描=1006 写入=503 删除=0 去重=503 耗时=635ms`
-  - **标签补齐**：用 ffmpeg 造了一个带完整 ID3 + 300×300 PNG 封面的 MP3，推到 `/sdcard/Music/PrimuseTest/` 且**不让媒体库索引**（模拟 SAF-only 文件）。扫描后 `元数据补齐 候选=1 更新=1 耗时=416ms`，库里得到 `封面测试曲|测试歌手|测试专辑|3030|7|2024`（trackNo 从 `7/12` 解析、year 从 `2024` 解析）
+  - **标签补齐**：用 ffmpeg 造了一个带完整 ID3 + 300×300 PNG 封面的 MP3，推到 `/sdcard/Music/MsopTest/` 且**不让媒体库索引**（模拟 SAF-only 文件）。扫描后 `元数据补齐 候选=1 更新=1 耗时=416ms`，库里得到 `封面测试曲|测试歌手|测试专辑|3030|7|2024`（trackNo 从 `7/12` 解析、year 从 `2024` 解析）
   - **封面落盘**：`封面预热 候选=30 成功=1 无封面=29 耗时=400ms`，DB 得到 `file:///data/user/0/.../covers/1594...jpg`，`exec-out` 取回校验为 **936 字节的 300×300 PNG**，与源文件内嵌图一致
   - **重扫不丢**：全量重扫后 `coverUri` 与标签全部存活，缓存文件没被回收
   - **删除回收**：删掉文件 → `scan_volume` → 全量重扫 `清理幽灵条目 1 条`、`清理孤立封面 1 张`，库里 503 条、缓存目录空
@@ -338,7 +338,7 @@
   2. **P2-02**：`PlaybackService`（`MediaSessionService`）+ `PlaybackController`（`MediaController` 封装，暴露 `StateFlow<PlaybackState>`）；清单注册服务与 `WAKE_LOCK` 权限。
   3. 顺带把 P2-03 的队列与模式、P2-04 的音频焦点/拔出暂停配置一起落地。
 - 新增文件：`PlayMode.kt`、`TrackMediaItem.kt`、`PlayerFactory.kt`、`PlaybackService.kt`、`PlaybackController.kt`（删掉了该模块的 `ModuleMarker`）
-- 改动的文件：`feature/player/build.gradle.kts`（media3 + hilt + ksp）、`AndroidManifest.xml`（service + WAKE_LOCK）、`PrimuseApp` / `MainActivity`（临时播放/暂停/下一首/模式入口）
+- 改动的文件：`feature/player/build.gradle.kts`（media3 + hilt + ksp）、`AndroidManifest.xml`（service + WAKE_LOCK）、`MsopApp` / `MainActivity`（临时播放/暂停/下一首/模式入口）
 
 - 关键决策：
   1. **播放器活在 Service 里，UI 只拿 MediaController** —— 页面来去、Activity 重建都不影响播放；控制器断开重连也不打断声音。
@@ -360,7 +360,7 @@
 - 踩到的坑：
   1. `cmd media_session dispatch pause` 在这台 ROM 上抛 `packageName may not be empty`，改用 `input keyevent 85/87`（走的是同一条媒体键通路，反而更接近锁屏/耳机真实行为）。
   2. `MediaSession.Builder.setSessionActivity()` 参数非空，`getLaunchIntentForPackage` 可能返回 null，要 `?.let`。
-  3. 播放测试曲（120s MP3 + 150s FLAC）留在设备 `/sdcard/Music/PrimuseTest/`，下次验播放直接用，别删。
+  3. 播放测试曲（120s MP3 + 150s FLAC）留在设备 `/sdcard/Music/MsopTest/`，下次验播放直接用，别删。
 
 - 遗留问题：
   1. **P2-04 三个场景没测**：拔耳机、来电打断、导航播报，adb 模拟不了，需要手动。配置已经就位（焦点/拔出开关都在 `PlayerFactory`）。
@@ -391,7 +391,7 @@
 - 本轮产出两份东西，都是**设计物，不是代码**（`feature/*/ui/` 依旧没动）：
   1. `docs/07-ui-design.md` —— 定稿提案，回答 Q1–Q4，给出色彩/字体/间距令牌、9 屏规格、手势总表、横屏适配、无障碍要求、Compose 落地映射与验收清单。
   2. `docs/design/prototype.html` —— 单文件离线原型，8 屏手机 + 1 屏横屏，点击屏幕内的导航/播放条能真的走一遍。支持 `#player`、`#queue` 这类锚点直达。
-- 四个决策：**3 Tab**（音乐库/搜索/设置，歌单移到音乐库顶栏）/ **歌曲行显示 44dp 封面**（另给紧凑模式）/ **播放页用自定义全屏浮层**（不是 `ModalBottomSheet`）/ **B 路线**（Material 3 承载 Primuse 视觉语言）。
+- 四个决策：**3 Tab**（音乐库/搜索/设置，歌单移到音乐库顶栏）/ **歌曲行显示 44dp 封面**（另给紧凑模式）/ **播放页用自定义全屏浮层**（不是 `ModalBottomSheet`）/ **B 路线**（Material 3 承载既定视觉语言）。
 - 两个自有主张，是这版和 06 草案最大的区别：
   1. **双空间**：浏览态跟随系统主题、浅色密集；播放态**恒定深色**，不受系统主题影响。收益是三点——大封面在深底上对比最强、OLED 息屏省电、从任何入口进播放页都是同一个「房间」。
   2. **封面主色驱动**：播放页背景不用模糊封面（Compose 在 API 31 以下做不了实时模糊，且切歌掉帧），改成从封面取一个主色做 12% 径向渐晕。**一行代码，视觉收益 80%**。
@@ -406,9 +406,9 @@
 
 ### 2026-11-11 · UI 落地 · 11 个文件，编译通过，APK 20 MB
 
-- 用户确认「修改项目UI」后开工。**视觉基准是 `preview/index.html`**（照搬 Primuse 的深色 + 蓝色 + 胶囊形态，结构照搬 NeriPlayer / MusicFree），不是 `docs/07` 那版浅色双主题。
-- 新增 11 个文件，全部在 `app/src/main/java/com/primuse/lite/ui/`：
-  `PrimuseApp.kt`、`theme/Theme.kt`、`icons/PlayerIcons.kt`、`components/TrackRow.kt`、`components/MiniPlayer.kt`、`library/LibraryScreen.kt`、`library/AlbumDetail.kt`、`library/LibraryViewModel.kt`、`player/PlayerSheet.kt`、`player/QueueSheet.kt`、`search/SearchScreen.kt`、`settings/SettingsScreen.kt`。
+- 用户确认「修改项目UI」后开工。**视觉基准是 `preview/index.html`**（照搬既定设计的深色 + 蓝色 + 胶囊形态，结构照搬 NeriPlayer / MusicFree），不是 `docs/07` 那版浅色双主题。
+- 新增 11 个文件，全部在 `app/src/main/java/com/reference/lite/ui/`：
+  `MsopApp.kt`、`theme/Theme.kt`、`icons/PlayerIcons.kt`、`components/TrackRow.kt`、`components/MiniPlayer.kt`、`library/LibraryScreen.kt`、`library/AlbumDetail.kt`、`library/LibraryViewModel.kt`、`player/PlayerSheet.kt`、`player/QueueSheet.kt`、`search/SearchScreen.kt`、`settings/SettingsScreen.kt`。
 - 三个值得记的决定：
   1. **UI 不拆到 feature 模块**。`feature:library` / `feature:settings` 是纯 Kotlin 库，没有 Compose / Hilt / Coil 依赖；为 UI 单独配一遍会引入跨模块 KSP 风险。自用 App 先在 app 模块跑通，需要复用时再下沉。
   2. **图标自绘，不引 `material-icons-extended`**。那个包未混淆时给 APK 加约 8 MB、给编译加几十秒，而播放器只需要 10 个图标（暂停、上下曲、随机、循环、队列、歌词、云、文件夹、唱片）。`PlayerIcons.kt` 用 `ImageVector.Builder` 描路径，零依赖。
@@ -467,7 +467,7 @@
   1. 构造带真实 `USLT` 的 `EmbeddedSynced.mp3`（无 `.lrc`）→ 播放页显示 6 行歌词，5 秒时第一行蓝色高亮；点第五行 → `position=42.7s`，高亮跳到第五行。
   2. `EmbeddedPlain.mp3` 的 `USLT` 没有时间标签 → 显示「歌词未同步 · 仅展示全文」+ 四行静态歌词，无高亮。
   3. `SidecarWins.mp3` 同时有内嵌歌词和同名 `.lrc` → 显示 `.lrc` 的两行，内嵌内容没有出现，优先级正确。
-- **踩坑**：ffmpeg 9 的 `-metadata lyrics=...` 写出来的是 `TXXX:USLT`，不是真正的 `USLT` 帧，解析器读不到。真机验收用的文件是手写 ID3v2.3 标签（Python 脚本在 `%TEMP%\primuse-lyrics-test\build_tags.py`，未入库）。以后造测试素材别信 ffmpeg 的 lyrics 元数据。
+- **踩坑**：ffmpeg 9 的 `-metadata lyrics=...` 写出来的是 `TXXX:USLT`，不是真正的 `USLT` 帧，解析器读不到。真机验收用的文件是手写 ID3v2.3 标签（Python 脚本在 `%TEMP%\reference-lyrics-test\build_tags.py`，未入库）。以后造测试素材别信 ffmpeg 的 lyrics 元数据。
 - 遗留问题：**远程歌词未做**，依赖 P3 远程音源；P5-01 因此保持 `[~]`。FLAC 内嵌歌词只有单测，设备上没有造 FLAC Vorbis 样本。
 - 给下一位的提醒：真实世界里有标签器把 UTF-16 空描述写成单字节 `0` 后直接跟 BOM，解析器已兼容；改 `decodeUslt` 时别把这个分支删掉。
 
@@ -492,7 +492,7 @@
   3. `feature:remote` 落地 `RemoteIdFactory`、`RemoteTrackMapper`、`RemoteLibrarySyncer`（BFS 递归列目录、音频后缀过滤、按 `idsBySource` 做差集清理、扫到 0 首时跳过清理的安全阀）。
   4. `PlayerFactory` 的 `ResolvingDataSource` 从恒等转发换成真实接缝：起播 / seek 重新打开 DataSpec 时把 `openlist:/路径` 换成新鲜 `raw_url`；`PlayerFactory` 改由 Hilt 注入，`PlaybackService` 用 `@Inject`。
   5. `network_security_config.xml` 全局禁明文 + 允许 user CA；配置页支持 URL 规范化、`http://` 二次确认、测试连接、保存并同步、清除配置与远程曲目。
-- 改了哪些文件：新增 `core/datastore/{ServerConfig,ServerConfigStore}.kt`、`core/network/{ServerUrl,OpenListDtos,OpenListException,StreamUrlResolver,OpenListClient}.kt` + `di/NetworkModule.kt`、`feature/remote/{RemoteIdFactory,RemoteTrackMapper,RemoteLibrarySyncer}.kt`、`app/ui/settings/{OpenListConfigScreen,OpenListViewModel,BatteryOptimization}.kt`、`app/src/main/res/xml/network_security_config.xml`、`USAGE.md`；修改 `PlayerFactory.kt`、`PlaybackService.kt`、`PrimuseApp.kt`、`SettingsScreen.kt`、`MainActivity.kt`、`AndroidManifest.xml`、4 个模块的 `build.gradle.kts`、`docs/03-openlist-api.md`、`AGENTS.md`、`TASKS.md`。删除三个已落地模块的 `ModuleMarker.kt`。
+- 改了哪些文件：新增 `core/datastore/{ServerConfig,ServerConfigStore}.kt`、`core/network/{ServerUrl,OpenListDtos,OpenListException,StreamUrlResolver,OpenListClient}.kt` + `di/NetworkModule.kt`、`feature/remote/{RemoteIdFactory,RemoteTrackMapper,RemoteLibrarySyncer}.kt`、`app/ui/settings/{OpenListConfigScreen,OpenListViewModel,BatteryOptimization}.kt`、`app/src/main/res/xml/network_security_config.xml`、`USAGE.md`；修改 `PlayerFactory.kt`、`PlaybackService.kt`、`MsopApp.kt`、`SettingsScreen.kt`、`MainActivity.kt`、`AndroidManifest.xml`、4 个模块的 `build.gradle.kts`、`docs/03-openlist-api.md`、`AGENTS.md`、`TASKS.md`。删除三个已落地模块的 `ModuleMarker.kt`。
 - 验证方式：
   - `./gradlew test` → debug **18 文件 / 154 用例 0 失败**（新增 40 个：URL 规范化 11、均衡器 14、远程映射 9、队列拖拽 6）。
   - 真机（emulator-5554 / Android 12，设 `settings put global http_proxy 10.0.2.2:10808` 借道主机代理）：保存并同步 → `扫描 23 项 · 写入 23 首 · 清理 0 条 · 454 ms`，DB `LOCAL|508 / OPENLIST|23`；搜索「Butter-Fly」命中远程歌；点播 → `state=3`、`CCodecConfig: audio/flac`、无 `ExoPlaybackException`；拖动进度条 → position `68129 → 208546` 且仍 `state=3`（Range + 直链刷新都生效）。
@@ -525,7 +525,7 @@
   2. 六接口实测：`ping/getMusicFolders/getArtists/getAlbumList2/getAlbum/getSong/search3/getCoverArt` 全通；**`search3` 空查询一次返回全部 23 首**（省掉 22 次 `getAlbum`）；`getCoverArt` 返回真实 `image/jpeg` 129 KB；`getLyricsBySongId` 返回 `code=70`。
   3. 两个否决项：`stream` 302 跳到 **`http://`** 明文 `/d/...?sign=`，被 `network_security_config` 拦；Subsonic 的 `path` 是服务器绝对路径，喂给 `/api/fs/get` 返回 `500 object not found`（要相对用户根目录的路径）。**因此流播不切 Subsonic**。
   4. 落地混合方案：`core:network` 新增 `SubsonicDtos` / `SubsonicClient`（`@rest` + `apiKey`、`search3` 分页、`HttpUrl` 拼 `getCoverArt`、错误码 40/50 归为鉴权失败）；`core:datastore` 配置加可选 `appKey`；`feature:remote` 新增 `SubsonicMetadata`（按**文件名**匹配，纯函数），同步后补全 `title/artist/album/albumId/mimeType/size/coverUri`，失败只降级；配置页加「Subsonic 应用密钥（可选）」并显示是否启用。
-  5. 修掉两个「静默不显示」的封面 bug：① app 只依赖 `coil-compose`、**缺 `coil-network-okhttp`**，本地 `file://` 正常、远程 `https://` 静默失败；② 补依赖后 debug 正常、**release 又变占位**——R8 删掉了 Coil 的 `META-INF/services/coil3.util.FetcherServiceLoaderTarget` 与实现类。最终在 `PrimuseApplication` 显式实现 `SingletonImageLoader.Factory` 并 `add(OkHttpNetworkFetcherFactory())`，proguard 里加 keep 兜底。
+  5. 修掉两个「静默不显示」的封面 bug：① app 只依赖 `coil-compose`、**缺 `coil-network-okhttp`**，本地 `file://` 正常、远程 `https://` 静默失败；② 补依赖后 debug 正常、**release 又变占位**——R8 删掉了 Coil 的 `META-INF/services/coil3.util.FetcherServiceLoaderTarget` 与实现类。最终在 `MsopApplication` 显式实现 `SingletonImageLoader.Factory` 并 `add(OkHttpNetworkFetcherFactory())`，proguard 里加 keep 兜底。
 - 改了哪些文件：新增 `core/network/{SubsonicDtos,SubsonicClient}.kt`、`feature/remote/SubsonicMetadata.kt`、`feature/remote/src/test/.../SubsonicMetadataTest.kt`；修改 `core/datastore/{ServerConfig,ServerConfigStore}.kt`、`feature/remote/RemoteLibrarySyncer.kt`、`app/ui/settings/{OpenListViewModel,OpenListConfigScreen}.kt`、`app/build.gradle.kts`（coil 依赖）、`docs/03`（新增 §7）、`AGENTS.md`、`TASKS.md`、`USAGE.md`。
 - 验证方式：
   - `:core:network:testDebugUnitTest`、`:feature:remote:testDebugUnitTest`、`:app:assembleDebug` 全过；`SubsonicMetadataTest` 11 个用例。

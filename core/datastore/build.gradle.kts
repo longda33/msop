@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.primuse.lite.core.datastore"
+    namespace = "com.msop.player.core.datastore"
     compileSdk = 37
 
     defaultConfig {

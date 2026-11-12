@@ -20,7 +20,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "PrimuseLite"
+rootProject.name = "Msop"
 
 include(":app")
 

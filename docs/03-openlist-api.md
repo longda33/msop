@@ -28,7 +28,7 @@
 ### 2.1 基础约定
 
 ```
-GET {baseUrl}/rest/{method}.view?u={user}&t={token}&s={salt}&v=1.16.1&c=PrimuseLite&f=json
+GET {baseUrl}/rest/{method}.view?u={user}&t={token}&s={salt}&v=1.16.1&c=Msop&f=json
 ```
 
 `baseUrl` 示例：
@@ -94,7 +94,7 @@ fun normalizeBaseUrl(raw: String): HttpUrl {
 BASE="https://music.example.com/openlist"
 U="admin"; P="你的密码"; S="abcdefgh"
 T=$(printf "%s%s" "$P" "$S" | md5sum | cut -d' ' -f1)
-Q="u=$U&t=$T&s=$S&v=1.16.1&c=PrimuseLite&f=json"
+Q="u=$U&t=$T&s=$S&v=1.16.1&c=Msop&f=json"
 
 # 0) 先确认证书是否可信（自签会报 SSL 错误，此时才用 -k，仅用于诊断）
 curl -sI "$BASE/rest/ping.view?$Q" | head -1
@@ -128,7 +128,7 @@ class SubsonicApi(private val okHttp: OkHttpClient, private val config: ServerCo
         get() {
             val salt = Random.nextBytes(8).toHex()
             val token = (config.password + salt).md5()
-            return "u=${config.user}&t=$token&s=$salt&v=1.16.1&c=PrimuseLite&f=json"
+            return "u=${config.user}&t=$token&s=$salt&v=1.16.1&c=Msop&f=json"
         }
 
     suspend fun ping(): Result<Unit> = request("ping")
@@ -356,6 +356,6 @@ Subsonic（apiKey）  ──→  艺术家 / 专辑 / 专辑ID / contentType / �
    已在 `app/build.gradle.kts` 补上该依赖。
 2. 补完依赖后 debug 正常，但 **release 包封面又变回占位图**：R8 把 Coil 通过
    `META-INF/services/coil3.util.FetcherServiceLoaderTarget` 注册的实现类删掉了，
-   `shrinkResources` 连注册文件一起删。已改为在 `PrimuseApplication` 显式实现
+   `shrinkResources` 连注册文件一起删。已改为在 `MsopApplication` 显式实现
    `SingletonImageLoader.Factory` 并 `add(OkHttpNetworkFetcherFactory())`（R8 能看到
    静态引用），`proguard-rules.pro` 里再 keep 一层兜底。

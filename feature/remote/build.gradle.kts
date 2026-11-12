@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.primuse.lite.feature.remote"
+    namespace = "com.msop.player.feature.remote"
     compileSdk = 37
 
     defaultConfig {

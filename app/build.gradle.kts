@@ -18,11 +18,11 @@ val storeFilePath = keystoreProperties.getProperty("storeFile", "")
 val hasReleaseKeystore = storeFilePath.isNotBlank() && rootProject.file(storeFilePath).exists()
 
 android {
-    namespace = "com.primuse.lite"
+    namespace = "com.msop.player"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.primuse.lite"
+        applicationId = "com.msop.player"
         minSdk = 26
         targetSdk = 37
         versionCode = 1

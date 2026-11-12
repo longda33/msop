@@ -1,79 +1,75 @@
-# Primuse Lite for Android
+# msop
 
-一个只做两件事的安卓音乐播放器：**读本机音频文件** + **对接 OpenList 音乐库**。
+一个只做两件事的安卓音乐播放器：**读本机音频** + **对接自己的 OpenList 音乐库**。
+自用、不上架；只读文件，不修改、不上传任何音频。
 
-不上架、不分发、单机自用。目标是「自己天天用」，不是「做一个产品」。
+## 功能
 
-> **当前进度（2026-11-10）**：Gradle 多模块骨架已搭好（12 模块），**但从未成功编译过一次**；UI 方案尚未确认，界面代码一行未写。
-> 接手开发请从 [`AGENTS.md`](AGENTS.md) 读起。
-
----
-
-## 一、范围（硬边界）
-
-| 做 | 不做 |
+| 领域 | 已实现 |
 |---|---|
-| 本机音频：**默认扫媒体库标准目录**，可追加 SAF 自定义目录 | 应用商店上架、软著、备案、隐私政策 |
-| **公网 OpenList** 音乐库（Subsonic API 优先，WebDAV 兜底） | 各家网盘私有 SDK（115 / 百度 / 阿里云盘） |
-| MP3 / AAC / M4A / FLAC / WAV / OGG / Opus | APE / WavPack / TTA / TAK / DSD / DTS-HD |
-| 内嵌与外挂 LRC 歌词 | 逐字歌词、AI 翻译、海报生成 |
-| 专辑 / 艺术家 / 文件夹三种浏览 | Android Auto、桌面小组件、跨设备同步后端 |
-| 播放队列、播放列表、搜索 | 音乐视频、投屏、DLNA |
+| 本机曲库 | MediaStore 标准目录 + SAF 自定义目录（可增可删）；双通道按路径哈希去重；增量扫描、幽灵清理、标签与封面补齐 |
+| 远程曲库 | OpenList 原生 REST 同步与流播（HTTPS + Range，可拖动进度条）；Subsonic 应用密钥补艺术家 / 专辑 / 真实封面 |
+| 播放 | ExoPlayer + MediaSessionService：后台播放、通知栏 / 锁屏 / 耳机键、音频焦点、拔耳机暂停、来电打断续播 |
+| 队列 | 顺序 / 单曲 / 随机；长按手柄拖拽排序 |
+| 歌词 | 同名 `.lrc` 优先，内嵌 USLT / Vorbis 兜底；当前行高亮、点击跳转、手动滑动 5 秒后回中 |
+| 均衡器 | 标准 10 段曲线，按设备实际 band 数映射，7 个预设 + 自定义 |
+| 其他 | 歌单持久化、搜索、封面缓存管理、电池优化白名单引导、release 自签名 + R8 |
 
-超出上表的需求，先改本文档再动代码。
+支持 MP3 / AAC / M4A / FLAC / WAV / OGG / Opus，最低 Android 8.0（API 26）。
 
-## 二、为什么是「重写」而不是「移植 Primuse」
+## 技术栈
 
-Primuse（[chenqi92/primuse](https://github.com/chenqi92/primuse)，253★）是纯 Apple 生态：
+Kotlin 2.4 · Jetpack Compose + Material 3 · Media3 1.11 · Room · Hilt · Coil 3 ·
+OkHttp + kotlinx.serialization · WorkManager
 
-- 1954 个 Swift 文件、41.6 MB 源码、3126 次提交、2026-03-28 → 2026-11-07
-- 依赖 SwiftUI / AVFoundation / MusicKit / CloudKit / CarPlay / WidgetKit，**Android 上一个都没有**
-- 2026-11-03 起许可证从 MIT 改为 **AGPL-3.0-only**
+构建：AGP 9.5 + Gradle 9.6 + Version Catalog（AGP 9 内置 Kotlin，不要再加 `kotlin.android` 插件）
 
-结论：代码复用率为 0。只借鉴产品形态、数据模型与踩坑清单，**不抄任何代码和资源**。
-
-## 三、为什么是「照搬成熟方案」
-
-已实测验证（详见 [docs/01-research.md](docs/01-research.md)）：
-
-- **播放与本地库** → 参考 NeriPlayer / Auxio / OuterTune 的模块划分与 Media3 用法
-- **OpenList 对接** → 走 Subsonic 协议，不自己造 WebDAV 客户端
-- **WebDAV 兜底** → dav4jvm（MPL-2.0，DAVx5 团队出品）
-
-## 四、目录
-
-> **如果这是你第一次接触本项目，并且要以「接手开发」的身份继续——直接去读 `AGENTS.md`，不要从 README 读起。**
+## 模块
 
 ```
-primuse-android/
-├── AGENTS.md               ← ★ 交接契约：状态、约束、下一步、禁止事项
-├── BUILD-NOTES.md          ← ★ 动手构建前必读：版本表、环境要求、四条降级方案
-├── TASKS.md                ← ★ 38 个任务，唯一进度真相
-├── README.md               ← 你在这里，范围与背景
-├── settings.gradle.kts     ← 12 个模块
-├── build.gradle.kts
-├── gradle/libs.versions.toml ← 唯一版本来源
-├── app/                    ← 单 Activity + 三 Tab 骨架
-├── core/                   ← model（已实现）/ common / database / network / datastore
-├── feature/                ← local / remote / player / library / lyrics / settings（均占位）
-├── scripts/check.sh        ← 完整性自检，无 JDK 也能跑
-└── docs/
-    ├── 01-research.md      ← GitHub 实测数据与选型依据
-    ├── 02-architecture.md  ← 模块划分、数据流、公网安全、双通道扫描
-    ├── 03-openlist-api.md  ← Subsonic 接口、URL 规范化、WebDAV 兜底
-    ├── 04-reference-index.md ← 抄哪个仓库的哪个文件
-    ├── 05-progress.md      ← 做过什么、踩过什么坑
-    ├── 06-ui-spec.md       ← UI 草案（未定稿）+ 还原度评估
-    └── reference/primuse-ios/ ← Primuse 官方截图 4 张
+:app              单 Activity + 全部 Compose UI + 导航 + DI 装配
+:core:model       Track / Album / Artist / SourceType
+:core:common      日志、崩溃捕获、SAF 根目录
+:core:database    Room 实体 / DAO / 迁移
+:core:network     OpenList 原生 REST + Subsonic 元数据客户端
+:core:datastore   服务器配置 + JWT 缓存
+:feature:local    MediaStore + SAF 扫描入库
+:feature:remote   远程曲库同步与元数据补全
+:feature:player   ExoPlayer + MediaSessionService + 均衡器
+:feature:lyrics   LRC 与内嵌歌词解析
+:feature:library / :feature:settings   预留（UI 目前集中在 app 模块）
 ```
 
-## 五、许可证
+依赖方向 `feature:* → core:*`，**feature 之间不互相依赖**，共享逻辑下沉到 core。
 
-| 项目 | 许可证 | 对本项目的影响 |
-|---|---|---|
-| Primuse | AGPL-3.0 | 不复制代码，仅参考形态 |
-| NeriPlayer / Auxio / OuterTune / RetroMusic | GPL-3.0 | 抄架构思路可以；**直接复制代码则本项目必须 GPL-3.0** |
-| dav4jvm | MPL-2.0 | 可链接使用，文件级开源 |
-| OpenList | AGPL-3.0 | 仅通过 HTTP 调用，不构成衍生作品 |
+## 构建
 
-**当前策略：自用、不分发**，因此即使参考 GPL 项目也不产生分发义务。若日后要发布，先回来重读这一节。
+```bash
+sh scripts/check.sh                   # 完整性自检（不需要 JDK）
+./gradlew.bat test                     # JVM 单测
+./gradlew.bat :app:assembleDebug       # 调试包
+./gradlew.bat :app:assembleRelease     # R8 + 自签名
+```
+
+环境：JDK 17+、Android SDK（compileSdk 37 / build-tools 37.0.0）、`local.properties` 填 `sdk.dir`。
+
+release 签名读根目录的 `keystore.properties`（与 `app/release.jks` 一起被 `.gitignore` 排除）。
+换机器按 [`USAGE.md`](USAGE.md) §6 重新生成即可；没有密钥时构建会退回 debug 签名，不会失败。
+
+## 文档
+
+| 文件 | 内容 |
+|---|---|
+| [`AGENTS.md`](AGENTS.md) | 交接契约：当前状态、硬约束、下一步、踩过的坑 |
+| [`TASKS.md`](TASKS.md) | 分阶段任务与验收标准 |
+| [`USAGE.md`](USAGE.md) | 使用说明：权限、目录、OpenList 配置、播放、构建 |
+| [`docs/02-architecture.md`](docs/02-architecture.md) | 模块边界、数据流、公网安全、双通道扫描 |
+| [`docs/03-openlist-api.md`](docs/03-openlist-api.md) | OpenList 实测：原生 REST、Subsonic、WebDAV 与决策依据 |
+| [`docs/04-reference-index.md`](docs/04-reference-index.md) | 实现参考索引 |
+| [`docs/05-progress.md`](docs/05-progress.md) | 进度日志与踩坑记录 |
+| [`docs/07-ui-design.md`](docs/07-ui-design.md) | UI 设计与 Compose 落地映射 |
+| [`docs/design/prototype.html`](docs/design/prototype.html) | 可交互 UI 原型（浏览器打开） |
+
+## 说明
+
+自用项目，不提供分发，不含任何音乐内容。音频只在本机与自己的 OpenList 之间流转。

@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.primuse.lite.feature.player"
+    namespace = "com.msop.player.feature.player"
     compileSdk = 37
 
     defaultConfig {

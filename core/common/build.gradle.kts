@@ -3,7 +3,7 @@ plugins {
 }
 
 android {
-    namespace = "com.primuse.lite.core.common"
+    namespace = "com.msop.player.core.common"
     compileSdk = 37
 
     defaultConfig {

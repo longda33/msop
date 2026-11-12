@@ -12,7 +12,7 @@
 1. **这是什么**：安卓音乐播放器，Kotlin + Compose + Media3，只读本机文件 + 对接公网 OpenList，自用不上架。
 2. **做到哪了**：**核心功能全部打通并真机验收**——12 模块骨架、本地扫描入库、播放内核、UI、歌单、歌词、均衡器、后台保活、**OpenList 远程音源（原生 REST 同步 + 流播 + seek，Subsonic 补艺术家/专辑/真实封面）**、release 自签名包、`USAGE.md`。本机具 Microsoft OpenJDK 21 + Android SDK，设备可用 `adb -s emulator-5554`（或 `127.0.0.1:5555`）。**该目录是 git 仓库**。
 3. **立刻该做什么**：没有阻塞项了。剩余都是可选项：P3-04 `SimpleCache` 缓存 / Wi-Fi 预加载、P3-05 WebDAV 兜底、P5-04 大库性能、P6-01 走查清单逐条勾。要做远程相关改动前**先读 `docs/03` §6 与 §7 的实测结论**（Subsonic 与原生 REST 各管一段，别把两者混着用）。
-4. **什么能碰**：`app/src/main/java/com/primuse/lite/ui/` 是正式 UI，可以直接改。`feature/*/ui/` 仍然空着——UI 没有按模块拆，全部集中在 app 模块（原因见 §5 的说明）。
+4. **什么能碰**：`app/src/main/java/com/reference/lite/ui/` 是正式 UI，可以直接改。`feature/*/ui/` 仍然空着——UI 没有按模块拆，全部集中在 app 模块（原因见 §5 的说明）。
 5. **可以并行做什么**：上面四项互不依赖。远程音源主通道是 **OpenList 原生 REST**（不是 Subsonic），别按旧文档写客户端。
 6. **最容易踩的坑**：AGP 9 内置 Kotlin，**不要**应用 `org.jetbrains.kotlin.android`；URL 拼接**不要**用字符串；Room 迁移**不要**开 destructive；`ffmpeg -metadata lyrics=` 写的是 `TXXX:USLT`；**KDoc 里出现 `/*` 会开启块注释**（写 `/@rest/*` 这种字面量会一路吞到文件末尾）；Media3 1.11 已删 `setEnableAudioOffload`。
 
@@ -20,7 +20,9 @@
 
 一个只做两件事的安卓音乐播放器：读本机音频 + 对接 OpenList 音乐库。目标是「自己天天用」，不是「做一个产品」。
 
-来源：用户看到 [Primuse](https://github.com/chenqi92/primuse)（iOS 音乐播放器，253★）后想做个安卓版。经调研确认 Primuse 是纯 Swift 生态（1954 个 Swift 文件、41.6 MB），**代码复用率为 0**，只借鉴产品形态。
+来源：想做一个「只读本机文件 + 对接自己的 OpenList」的安卓播放器，供自己日常使用。
+项目为**独立实现**，Kotlin + Compose + Media3 从零编写，不含任何第三方播放器的代码或资源；
+界面与交互按自己的使用习惯设计，不追求还原某个既有产品。
 
 ## 2. 当前状态
 
@@ -45,7 +47,7 @@
 1. **不上架、不分发**。不引入应用商店签名流程、隐私政策、审核适配。
 2. **只支持两种音源**：本机文件、OpenList。不要加 SMB/FTP/Subsonic 直连/其他网盘。
 3. **只用常见格式**：MP3 / AAC / M4A / FLAC / WAV / OGG / Opus。**不引入 FFmpeg**，Media3 原生够用。
-4. **不复制 Primuse 的代码**（AGPL-3.0），只参考产品形态。
+4. **不复制任何第三方播放器的代码或资源**。
 5. **不自己写 WebDAV 客户端**，优先 Subsonic API；兜底用 dav4jvm。
 6. **所有依赖版本集中在 `gradle/libs.versions.toml`**，禁止在模块 `build.gradle.kts` 里写死版本号。
 7. **公网必须 HTTPS**。用户填 `http://` 时弹警告并要求二次确认。禁止全局 `usesCleartextTraffic=true`。
@@ -164,10 +166,10 @@ export MSYS_NO_PATHCONV=1
 adb shell content call --uri content://media --method scan_volume --arg external_primary
 
 # 直接看数据库
-adb shell run-as com.primuse.lite sqlite3 databases/primuse-lite.db "SELECT * FROM tracks LIMIT 5;"
+adb shell run-as com.msop.player sqlite3 databases/msop.db "SELECT * FROM tracks LIMIT 5;"
 
 # 取二进制文件（封面等）必须用 exec-out：shell cat 会把 \n 翻成 \r\n，字节全错
-adb exec-out run-as com.primuse.lite cat files/covers/<hash>.jpg > cover.jpg
+adb exec-out run-as com.msop.player cat files/covers/<hash>.jpg > cover.jpg
 
 # 点 UI 用 uiautomator 拿真实坐标，别照截图猜（这台机器是横屏 1280x720）
 adb shell uiautomator dump /sdcard/ui.xml && adb pull /sdcard/ui.xml
@@ -207,18 +209,18 @@ adb root && adb shell am broadcast -a android.media.AUDIO_BECOMING_NOISY && adb 
 6. **远程封面/艺术家依赖应用密钥** —— 填了 OpenList「媒体应用密钥」才有真实封面与艺术家/专辑；不填则 `coverUri` 为 null、专辑取目录名。Subsonic 的 `getLyricsBySongId` 返回 `code=70`，远程歌词暂时没有。
 7. **`./gradlew test` 偶发 KSP 竞态** —— 并行构建时偶见 `kspReleaseKotlin` 报 `OpenListClient could not be resolved`，**重跑一次即过**（已复现并确认不是代码问题）。别为此改依赖结构。
 8. **release 的 `lintVitalRelease` 会误报 `Instantiatable`** —— `PlaybackService` 在 feature 模块、父类来自 implementation 依赖；manifest 已局部 `tools:ignore`，别删。
-9. **Coil 3 的远程封面有两道坎** —— ① 只依赖 `coil-compose` 时本地 `file://` 正常、远程 `https://` **静默失败**，必须加 `coil-network-okhttp`；② **release 的 R8 + `shrinkResources` 会删掉 Coil 的 `META-INF/services` 注册文件与 fetcher 实现类**，表现是 debug 封面正常、release 全是占位图。已在 `PrimuseApplication` 里显式实现 `SingletonImageLoader.Factory` 并 `add(OkHttpNetworkFetcherFactory())`，`proguard-rules.pro` 里另加了 keep 兜底。排查封面问题先看这两处。
+9. **Coil 3 的远程封面有两道坎** —— ① 只依赖 `coil-compose` 时本地 `file://` 正常、远程 `https://` **静默失败**，必须加 `coil-network-okhttp`；② **release 的 R8 + `shrinkResources` 会删掉 Coil 的 `META-INF/services` 注册文件与 fetcher 实现类**，表现是 debug 封面正常、release 全是占位图。已在 `MsopApplication` 里显式实现 `SingletonImageLoader.Factory` 并 `add(OkHttpNetworkFetcherFactory())`，`proguard-rules.pro` 里另加了 keep 兜底。排查封面问题先看这两处。
 
 ### UI 已落地并真机验收（2026-11-11）
 
-界面代码在 **`app/src/main/java/com/primuse/lite/ui/`**，共 22 个文件。本轮新增：
+界面代码在 **`app/src/main/java/com/reference/lite/ui/`**，共 22 个文件。本轮新增：
 `settings/EqualizerScreen.kt`（均衡器全屏浮层）、`settings/OpenListConfigScreen.kt` +
 `OpenListViewModel.kt`（服务器配置与同步）、`settings/BatteryOptimization.kt`（保活引导）、
 `player/QueueReorder.kt`（拖拽目标位置纯函数）。主要文件：
 
 ```
-PrimuseApp.kt          三 Tab 外壳 + 迷你播放条 + 播放页浮层 + 队列
-theme/Theme.kt         色板 / 字体 / 尺寸令牌（深色，Primuse 配色）
+MsopApp.kt          三 Tab 外壳 + 迷你播放条 + 播放页浮层 + 队列
+theme/Theme.kt         色板 / 字体 / 尺寸令牌（深色，蓝主色）
 icons/PlayerIcons.kt   10 个自绘播放图标（不引 material-icons-extended）
 components/TrackRow.kt 歌曲行、封面、空态、标题、文件信息弹窗
 components/MiniPlayer.kt 胶囊播放条 + 底部进度线
@@ -278,7 +280,7 @@ sh scripts/check.sh
 ./gradlew :app:assembleDebug     # 编译
 ./gradlew test                   # 单测
 ./gradlew :app:installDebug      # 装机（需 adb）
-adb logcat -s PrimuseLite:V AndroidRuntime:E
+adb logcat -s Msop:V AndroidRuntime:E
 ```
 
 **验收标准写在 `TASKS.md` 每个任务里，以那里为准。** 没有可观测的验收标准，就不要标记完成。
@@ -288,7 +290,7 @@ adb logcat -s PrimuseLite:V AndroidRuntime:E
 
 | # | 决策 | 理由 | 详见 |
 |---|---|---|---|
-| D1 | Kotlin + Compose，不用 Flutter | 音频生态只有原生，参考项目也全是原生 | docs/02 |
+| D1 | Kotlin + Compose，不用 Flutter | 音频生态只有原生，跨平台方案需额外插件桥接 | docs/02 |
 | D2 | Media3，不引入 FFmpeg | 常见格式原生够用，省 2 个月 | docs/02 |
 | D3 | **混合**：原生 REST 管同步与流播，Subsonic（`apiKey`）管元数据与封面 | 首测 Subsonic 未启用 → 全走原生 REST；用户启用后复测：Subsonic 只认 `apiKey`、`stream` 302 到 http 明文不可用、`path` 与 `/api/fs/get` 不通用，但艺术家/专辑/封面是原生 REST 给不了的 | docs/03 §6 §7 |
 | D4 | 保留 WebDAV 兜底 | Subsonic 实现可能不全，WebDAV 一定能列目录 | docs/03 |
@@ -326,7 +328,6 @@ adb logcat -s PrimuseLite:V AndroidRuntime:E
 | AGP 9 内置 Kotlin | 🟡 存疑 | 出问题按 §4.2 关闭内置 Kotlin（AGP 10 起不可关） |
 | compileSdk 37 | ✅ **已确认** | 本机 SDK 含 `platforms/android-37.0` + `build-tools/37.0.0` |
 | OpenList Subsonic 接口完整度 | ✅ **已实测（不可用）** | 2026-11-11 实测 v4.2.9 未启用，改走原生 REST 全通；见 `docs/03` §6 |
-| Primuse UI 还原度 | 🟡 已评估 | 骨架层 88–92%，播放层 78–85%，特效层 30–50%，详见 `docs/06` §9；落地方案见 `docs/07` |
 
 ## 13. 文档索引
 
@@ -336,12 +337,9 @@ adb logcat -s PrimuseLite:V AndroidRuntime:E
 | `USAGE.md` | **用户手册**：安装、权限、目录增删、OpenList 配置、播放/歌词/均衡器、构建与重新生成签名、已知限制 |
 | `BUILD-NOTES.md` | **动手构建前必读**：环境要求、版本表、四条降级方案 |
 | `TASKS.md` | **每次开工前**：38 个任务、验收标准、依赖关系 |
-| `docs/01-research.md` | 想换技术方案时，看 GitHub 实测数据与选型依据 |
 | `docs/02-architecture.md` | 写代码前：模块边界、数据流、公网安全、双通道扫描 |
 | `docs/03-openlist-api.md` | **做远程改动前必读 §6**（2026-11-11 真实服务器实测：Subsonic 不可用、原生 REST 全通、raw_url 约束）；§1–5 是早期设计存档 |
 | `docs/04-reference-index.md` | 不知道某功能怎么实现时：该抄哪个仓库的哪个文件 |
 | `docs/05-progress.md` | 想知道之前做过什么、踩过什么坑、下一步提醒 |
-| `docs/06-ui-spec.md` | UI 草案与还原度评估。**已被 `docs/07` 取代**，仅作讨论存档 |
 | `docs/07-ui-design.md` | **UI 定稿提案**：Q1–Q4 决策、色彩/字体/间距令牌、9 屏规格、交互、横屏适配、Compose 落地映射 |
 | `docs/design/prototype.html` | 可交互高保真原型（浏览器打开，9 屏可点，支持 `#player` 这类锚点直达） |
-| `docs/reference/primuse-ios/` | Primuse 官方截图 4 张，评估视觉还原时对照用 |

@@ -160,7 +160,7 @@
 | NeriPlayer 的 `modules/download`、`modules/listentogether` | 我们不需要下载与一起听，抄了只增负担 |
 | NeriPlayer 的 WebDAV 同步实现（40+ 文件） | 那是同步用途，与音源完全不同，会误导架构 |
 | 任何仓库的 `GLSL` / 着色器代码 | 我们是普通 UI，不需要 GPU 特效 |
-| Primuse 的任何 Swift 代码 | AGPL-3.0 + 平台不兼容，双重不可用 |
+| 任何第三方播放器的 Swift 代码 | AGPL-3.0 + 平台不兼容，双重不可用 |
 | ease-music-player 的 Rust 部分 | 试验性技术栈，维护成本高 |
 
 ## 20. 检索命令

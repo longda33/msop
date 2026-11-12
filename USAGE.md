@@ -1,4 +1,4 @@
-# Primuse Lite 使用说明
+# msop 使用说明
 
 一个自用、不上架的安卓音乐播放器。只读本机音频 + 对接自己的 OpenList，**不修改、不上传任何音频文件**。
 支持 MP3 / AAC / M4A / FLAC / WAV / OGG / Opus，最低 Android 8.0（API 26）。
@@ -18,7 +18,7 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 ```
 
 **debug 与 release 签名不同**：互相覆盖安装会报 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`。
-先 `adb uninstall com.primuse.lite` 再装。卸载会清掉曲库、歌单和服务器配置，
+先 `adb uninstall com.msop.player` 再装。卸载会清掉曲库、歌单和服务器配置，
 重装后需要重新添加目录 / 填一次服务器（音频文件本身不会被删）。
 
 第一次启动会申请音频读取权限（Android 13+ 是 `READ_MEDIA_AUDIO`，12 及以下
@@ -141,15 +141,15 @@ sh scripts/check.sh                 # 不依赖 JDK 的完整性自检
 `.gitignore` 排除，不会入库）。换机器时重新生成一次：
 
 ```bash
-keytool -genkeypair -v -keystore app/release.jks -alias primuse \
+keytool -genkeypair -v -keystore app/release.jks -alias msop \
   -keyalg RSA -keysize 2048 -validity 10000 \
   -storepass "<你的密码>" -keypass "<你的密码>" \
-  -dname "CN=Primuse Lite, OU=Personal, O=Primuse, C=CN"
+  -dname "CN=msop, OU=Personal, O=msop, C=CN"
 
 # 然后新建 keystore.properties：
 # storeFile=app/release.jks
 # storePassword=<你的密码>
-# keyAlias=primuse
+# keyAlias=msop
 # keyPassword=<你的密码>
 ```
 

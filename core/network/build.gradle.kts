@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.primuse.lite.core.network"
+    namespace = "com.msop.player.core.network"
     compileSdk = 37
 
     defaultConfig {

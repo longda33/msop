@@ -76,7 +76,7 @@ Windows 下用 `gradlew.bat`。也可以直接用 Android Studio 打开根目录
    ksp(libs.hilt.compiler)
    implementation(libs.hilt.navigation.compose)
    ```
-3. `PrimuseApplication.kt` 删掉 `@HiltAndroidApp` 注解和 import
+3. `MsopApplication.kt` 删掉 `@HiltAndroidApp` 注解和 import
 4. `MainActivity.kt` 删掉 `@AndroidEntryPoint` 注解和 import
 
 ### 4.2 风险 B：内置 Kotlin 本身有问题
@@ -113,7 +113,7 @@ gradle wrapper --gradle-version 9.6.0
 ## 5. 工程结构
 
 ```
-primuse-android/
+msop-android/
 ├── settings.gradle.kts          12 个模块的 include
 ├── build.gradle.kts             根插件声明（全部 apply false）
 ├── gradle.properties

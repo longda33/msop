@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.primuse.lite.feature.lyrics"
+    namespace = "com.msop.player.feature.lyrics"
     compileSdk = 37
 
     defaultConfig {
