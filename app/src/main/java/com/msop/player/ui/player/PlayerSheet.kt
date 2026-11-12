@@ -5,6 +5,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.animateScrollBy
@@ -32,20 +33,26 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,6 +62,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -62,6 +71,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
@@ -101,6 +111,8 @@ fun PlayerSheet(
     onSeek: (Long) -> Unit,
     onCycleMode: () -> Unit,
     onOpenQueue: () -> Unit,
+    isFavorite: Boolean = false,
+    onToggleFavorite: () -> Unit = {},
     lyricsViewModel: LyricsViewModel = hiltViewModel(),
 ) {
     BackHandler(onBack = onCollapse)
@@ -113,6 +125,79 @@ fun PlayerSheet(
     var dragValue by remember { mutableFloatStateOf(-1f) }
     val liveFraction = if (duration > 0) (positionMs.toFloat() / duration).coerceIn(0f, 1f) else 0f
     val fraction = if (dragValue >= 0f) dragValue else liveFraction
+
+    // 定时关闭：sleepEndsAt 为 0 表示未开启
+    var sleepEndsAt by remember { mutableLongStateOf(0L) }
+    var sleepDialogOpen by remember { mutableStateOf(false) }
+    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val playingNow by rememberUpdatedState(state.isPlaying)
+    LaunchedEffect(sleepEndsAt) {
+        if (sleepEndsAt > 0L) {
+            while (true) {
+                nowMs = System.currentTimeMillis()
+                if (nowMs >= sleepEndsAt) {
+                    sleepEndsAt = 0L
+                    if (playingNow) onToggle()
+                    break
+                }
+                delay(1_000)
+            }
+        }
+    }
+    val sleepRemainingMin = if (sleepEndsAt > 0L) {
+        (((sleepEndsAt - nowMs).coerceAtLeast(0L) + 59_999L) / 60_000L).toInt()
+    } else {
+        0
+    }
+    val sleepLabel = if (sleepRemainingMin > 0) "${sleepRemainingMin}分" else "定时"
+    val sleepActive = sleepRemainingMin > 0
+
+    if (sleepDialogOpen) {
+        AlertDialog(
+            onDismissRequest = { sleepDialogOpen = false },
+            containerColor = Palette.Surface,
+            titleContentColor = Palette.TextPrimary,
+            textContentColor = Palette.TextSecondary,
+            title = { Text("定时关闭") },
+            text = {
+                Column {
+                    listOf(15, 30, 60).forEach { m ->
+                        Text(
+                            text = "$m 分钟后暂停",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Palette.TextPrimary,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    sleepEndsAt = System.currentTimeMillis() + m * 60_000L
+                                    sleepDialogOpen = false
+                                }
+                                .padding(vertical = 12.dp),
+                        )
+                    }
+                    if (sleepEndsAt > 0L) {
+                        Text(
+                            text = "关闭定时",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Palette.Red,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    sleepEndsAt = 0L
+                                    sleepDialogOpen = false
+                                }
+                                .padding(vertical = 12.dp),
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { sleepDialogOpen = false }) {
+                    Text("取消", color = Palette.TextSecondary)
+                }
+            },
+        )
+    }
 
     // 下滑收起：只跟手移动，松手后再决定「回去」还是「关掉」。
     // 上滑不移动面板（上面已经是屏幕边缘），累计位移超过阈值就打开队列。
@@ -260,6 +345,11 @@ fun PlayerSheet(
                         onPrevious = onPrevious,
                         onCycleMode = onCycleMode,
                         onOpenQueue = onOpenQueue,
+                        isFavorite = isFavorite,
+                        onToggleFavorite = onToggleFavorite,
+                        sleepLabel = sleepLabel,
+                        sleepActive = sleepActive,
+                        onSleepTimer = { sleepDialogOpen = true },
                         modifier = Modifier.weight(0.94f).fillMaxHeight(),
                     )
                     LyricsPane(
@@ -269,6 +359,8 @@ fun PlayerSheet(
                         vm = lyricsViewModel,
                         dragModifier = dragModifier,
                         showHeader = false,
+                        isFavorite = isFavorite,
+                        onToggleFavorite = onToggleFavorite,
                         modifier = Modifier.weight(1.06f).fillMaxHeight(),
                     )
                 }
@@ -280,6 +372,8 @@ fun PlayerSheet(
                         onSeek = onSeek,
                         vm = lyricsViewModel,
                         dragModifier = dragModifier,
+                        isFavorite = isFavorite,
+                        onToggleFavorite = onToggleFavorite,
                         modifier = Modifier.weight(1f),
                     )
                 } else {
@@ -304,6 +398,7 @@ fun PlayerSheet(
                                     modifier = Modifier.fillMaxSize(),
                                     iconSize = 56.dp,
                                 )
+                                CoverRing(Modifier.fillMaxSize())
                                 Box(
                                     modifier = Modifier
                                         .align(Alignment.BottomStart)
@@ -357,6 +452,11 @@ fun PlayerSheet(
                     onPrevious = onPrevious,
                     onCycleMode = onCycleMode,
                     onOpenQueue = onOpenQueue,
+                    isFavorite = isFavorite,
+                    onToggleFavorite = onToggleFavorite,
+                    sleepLabel = sleepLabel,
+                    sleepActive = sleepActive,
+                    onSleepTimer = { sleepDialogOpen = true },
                     showViewToggle = true,
                     lyricsSelected = showLyrics,
                     onShowLyrics = { showLyrics = true },
@@ -380,6 +480,11 @@ private fun LandscapePlayerPane(
     onPrevious: () -> Unit,
     onCycleMode: () -> Unit,
     onOpenQueue: () -> Unit,
+    isFavorite: Boolean,
+    onToggleFavorite: () -> Unit,
+    sleepLabel: String,
+    sleepActive: Boolean,
+    onSleepTimer: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -411,6 +516,7 @@ private fun LandscapePlayerPane(
                         modifier = Modifier.fillMaxSize(),
                         iconSize = 48.dp,
                     )
+                    CoverRing(Modifier.fillMaxSize())
                 }
             }
             Text(
@@ -442,6 +548,11 @@ private fun LandscapePlayerPane(
             onPrevious = onPrevious,
             onCycleMode = onCycleMode,
             onOpenQueue = onOpenQueue,
+            isFavorite = isFavorite,
+            onToggleFavorite = onToggleFavorite,
+            sleepLabel = sleepLabel,
+            sleepActive = sleepActive,
+            onSleepTimer = onSleepTimer,
             showViewToggle = false,
             lyricsSelected = true,
             onShowLyrics = {},
@@ -464,6 +575,11 @@ private fun PlayerTransport(
     onPrevious: () -> Unit,
     onCycleMode: () -> Unit,
     onOpenQueue: () -> Unit,
+    isFavorite: Boolean,
+    onToggleFavorite: () -> Unit,
+    sleepLabel: String,
+    sleepActive: Boolean,
+    onSleepTimer: () -> Unit,
     showViewToggle: Boolean,
     lyricsSelected: Boolean,
     onShowLyrics: () -> Unit,
@@ -559,27 +675,33 @@ private fun PlayerTransport(
 
         Row(
             modifier = Modifier.fillMaxWidth().padding(
-                start = if (compact) 0.dp else 18.dp,
-                end = if (compact) 0.dp else 18.dp,
+                start = if (compact) 0.dp else 12.dp,
+                end = if (compact) 0.dp else 12.dp,
                 top = if (compact) 2.dp else 20.dp,
                 bottom = if (compact) 4.dp else 24.dp,
             ),
-            horizontalArrangement = if (showViewToggle) Arrangement.SpaceAround else Arrangement.Center,
+            horizontalArrangement = Arrangement.SpaceAround,
         ) {
+            FootEntry(
+                icon = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                label = "喜欢",
+                active = isFavorite,
+                activeColor = Palette.Red,
+                onClick = onToggleFavorite,
+            )
             if (showViewToggle) {
-                FootEntry(
-                    icon = PlayerIcons.Lyrics,
-                    label = "歌词",
-                    active = lyricsSelected,
-                    onClick = onShowLyrics,
-                )
-                FootEntry(
-                    icon = PlayerIcons.Disc,
-                    label = "封面",
-                    active = !lyricsSelected,
-                    onClick = onShowCover,
-                )
+                if (lyricsSelected) {
+                    FootEntry(PlayerIcons.Disc, "封面", active = false, onClick = onShowCover)
+                } else {
+                    FootEntry(PlayerIcons.Lyrics, "歌词", active = false, onClick = onShowLyrics)
+                }
             }
+            FootEntry(
+                icon = PlayerIcons.Timer,
+                label = sleepLabel,
+                active = sleepActive,
+                onClick = onSleepTimer,
+            )
             FootEntry(
                 icon = PlayerIcons.Queue,
                 label = "队列",
@@ -621,24 +743,25 @@ private fun FootEntry(
     label: String,
     active: Boolean,
     onClick: () -> Unit,
+    activeColor: Color = Palette.BlueLight,
 ) {
     Column(
         modifier = Modifier
             .clip(Shapes.card)
             .clickable(onClick = onClick)
-            .padding(horizontal = 18.dp, vertical = 6.dp),
+            .padding(horizontal = 14.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(
             imageVector = icon,
             contentDescription = label,
-            tint = if (active) Palette.BlueLight else Palette.TextTertiary,
+            tint = if (active) activeColor else Palette.TextTertiary,
             modifier = Modifier.size(20.dp),
         )
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = if (active) Palette.BlueLight else Palette.TextTertiary,
+            color = if (active) activeColor else Palette.TextTertiary,
             modifier = Modifier.padding(top = 5.dp),
         )
     }
@@ -660,6 +783,8 @@ private fun LyricsPane(
     vm: LyricsViewModel,
     dragModifier: Modifier,
     showHeader: Boolean = true,
+    isFavorite: Boolean = false,
+    onToggleFavorite: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     LaunchedEffect(track?.id) { vm.load(track) }
@@ -689,6 +814,20 @@ private fun LyricsPane(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(top = 1.dp),
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onToggleFavorite),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                        contentDescription = if (isFavorite) "取消喜欢" else "喜欢",
+                        tint = if (isFavorite) Palette.Red else Palette.TextTertiary,
+                        modifier = Modifier.size(20.dp),
                     )
                 }
             }
@@ -809,6 +948,16 @@ private fun LyricLines(
                 val distance = if (currentIndex >= 0) abs(index - currentIndex) else Int.MAX_VALUE
                 val near = distance == 1
 
+                // 空间透视淡出：越远越暗（BetterLyrics 的 spatial fade）
+                val alpha = when {
+                    active -> 1f
+                    !lyrics.synced -> 0.72f
+                    else -> (0.55f / (1f + 0.5f * (distance - 1))).coerceIn(0.14f, 0.55f)
+                }
+                val activeStyle = TextStyle(
+                    shadow = Shadow(color = Color(0x665B76FF), blurRadius = 26f),
+                )
+
                 when {
                     // 当前行 + 逐字标签：卡拉OK式逐字高亮（已唱变亮，未唱保持暗）
                     active && line.words.isNotEmpty() -> {
@@ -817,61 +966,75 @@ private fun LyricLines(
                             line.words.forEachIndexed { wi, w ->
                                 val sung = wi <= activeWord
                                 withStyle(
-                                    SpanStyle(color = if (sung) Color.White else Color(0x52FFFFFF)),
+                                    SpanStyle(color = if (sung) Color.White else Color(0x40FFFFFF)),
                                 ) { append(w.text) }
                                 if (wi != line.words.lastIndex) append(" ")
                             }
                         }
                         Text(
                             text = annotated,
-                            fontSize = 20.sp,
-                            lineHeight = 36.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            letterSpacing = (-0.2).sp,
+                            fontSize = 28.sp,
+                            lineHeight = 38.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = (-0.4).sp,
                             textAlign = TextAlign.Center,
+                            style = activeStyle,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { onSeek(line.timeMs) }
-                                .padding(vertical = 11.dp),
+                                .padding(vertical = 14.dp),
                         )
                     }
 
-                    // 当前行：大号加粗纯白（对应 index.html 的 .l.on）
+                    // 当前行：超大号加粗纯白 + 柔和光晕
                     active -> Text(
                         text = line.text,
-                        fontSize = 20.sp,
-                        lineHeight = 36.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        letterSpacing = (-0.2).sp,
+                        fontSize = 28.sp,
+                        lineHeight = 38.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = (-0.4).sp,
                         color = Color.White,
                         textAlign = TextAlign.Center,
+                        style = activeStyle,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onSeek(line.timeMs) }
-                            .padding(vertical = 11.dp),
+                            .padding(vertical = 14.dp),
                     )
 
-                    // 非当前行：邻近行稍亮、远处更暗（对应 .l.near / .l）
-                    else -> {
-                        val color = when {
-                            !lyrics.synced -> Color(0xB2FFFFFF)
-                            near -> Color(0x85FFFFFF)
-                            else -> Color(0x52FFFFFF)
-                        }
-                        Text(
-                            text = line.text,
-                            fontSize = 15.sp,
-                            lineHeight = 31.sp,
-                            color = color,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .then(if (lyrics.synced) Modifier.clickable { onSeek(line.timeMs) } else Modifier)
-                                .padding(vertical = 3.dp),
-                        )
-                    }
+                    // 非当前行：邻近行稍亮、远处更暗
+                    else -> Text(
+                        text = line.text,
+                        fontSize = if (near) 17.sp else 15.sp,
+                        lineHeight = 31.sp,
+                        color = Color.White.copy(alpha = alpha),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(if (lyrics.synced) Modifier.clickable { onSeek(line.timeMs) } else Modifier)
+                            .padding(vertical = 4.dp),
+                    )
                 }
             }
+        }
+    }
+}
+
+/** 封面上叠的同心圆 ring（index.html 的 .cover .ring）。 */
+@Composable
+private fun CoverRing(modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val cx = size.width / 2f
+        val cy = size.height / 2f
+        val r = size.minDimension / 2f
+        val w = 1.dp.toPx()
+        listOf(0.36f to 0.17f, 0.52f to 0.11f, 0.68f to 0.07f).forEach { (f, a) ->
+            drawCircle(
+                color = Color.White.copy(alpha = a),
+                radius = r * f,
+                center = Offset(cx, cy),
+                style = Stroke(width = w),
+            )
         }
     }
 }

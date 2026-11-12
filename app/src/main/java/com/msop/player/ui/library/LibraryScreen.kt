@@ -1,5 +1,10 @@
 package com.msop.player.ui.library
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -132,40 +137,52 @@ fun LibraryScreen(
 
         TabRow(selected = tab, onSelect = { tab = it })
 
-        if (tracks.any { it.source == SourceType.OPENLIST }) {
-            SourceChips(selected = sourceFilter, onSelect = { sourceFilter = it })
-        }
+        val localCount = remember(tracks) { tracks.count { it.source == SourceType.LOCAL } }
+        val cloudCount = remember(tracks) { tracks.count { it.source == SourceType.OPENLIST } }
+        SourceChips(
+            selected = sourceFilter,
+            total = tracks.size,
+            local = localCount,
+            cloud = cloudCount,
+            onSelect = { sourceFilter = it },
+        )
 
         Box(Modifier.weight(1f)) {
-            when {
-                tracks.isEmpty() -> EmptyHint(
-                    title = "曲库还是空的",
-                    description = "首次扫描可能需要几秒。也可以到设置里添加自定义目录。",
-                )
-                tab == 0 -> TrackList(
-                    tracks = filtered,
-                    currentTrackId = playback.currentTrackId,
-                    isPlaying = playback.isPlaying,
-                    onPlay = { list, index -> vm.play(list, index) },
-                )
-                tab == 1 -> TrackList(
-                    tracks = remember(filtered) { filtered.sortedByDescending { it.addedAt }.take(80) },
-                    currentTrackId = playback.currentTrackId,
-                    isPlaying = playback.isPlaying,
-                    onPlay = { list, index -> vm.play(list, index) },
-                )
-                tab == 2 -> AlbumGrid(
-                    tracks = filtered,
-                    onOpen = { detailAlbum = it },
-                )
-                tab == 3 -> ArtistList(
-                    tracks = filtered,
-                    onOpen = { artist ->
-                        val list = filtered.filter { (it.artist ?: "未知艺术家") == artist }
-                        if (list.isNotEmpty()) vm.play(list, 0)
-                    },
-                )
-                else -> FolderList(tracks = filtered, onPlay = { list, index -> vm.play(list, index) })
+            AnimatedContent(
+                targetState = if (tracks.isEmpty()) -1 else tab,
+                transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(120)) },
+                label = "libraryTab",
+            ) { t ->
+                when {
+                    t == -1 -> EmptyHint(
+                        title = "曲库还是空的",
+                        description = "首次扫描可能需要几秒。也可以到设置里添加自定义目录。",
+                    )
+                    t == 0 -> TrackList(
+                        tracks = filtered,
+                        currentTrackId = playback.currentTrackId,
+                        isPlaying = playback.isPlaying,
+                        onPlay = { list, index -> vm.play(list, index) },
+                    )
+                    t == 1 -> TrackList(
+                        tracks = remember(filtered) { filtered.sortedByDescending { it.addedAt }.take(80) },
+                        currentTrackId = playback.currentTrackId,
+                        isPlaying = playback.isPlaying,
+                        onPlay = { list, index -> vm.play(list, index) },
+                    )
+                    t == 2 -> AlbumGrid(
+                        tracks = filtered,
+                        onOpen = { detailAlbum = it },
+                    )
+                    t == 3 -> ArtistList(
+                        tracks = filtered,
+                        onOpen = { artist ->
+                            val list = filtered.filter { (it.artist ?: "未知艺术家") == artist }
+                            if (list.isNotEmpty()) vm.play(list, 0)
+                        },
+                    )
+                    else -> FolderList(tracks = filtered, onPlay = { list, index -> vm.play(list, index) })
+                }
             }
         }
     }
@@ -211,7 +228,13 @@ private fun TabRow(selected: Int, onSelect: (Int) -> Unit) {
 }
 
 @Composable
-private fun SourceChips(selected: SourceFilter, onSelect: (SourceFilter) -> Unit) {
+private fun SourceChips(
+    selected: SourceFilter,
+    total: Int,
+    local: Int,
+    cloud: Int,
+    onSelect: (SourceFilter) -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -219,9 +242,11 @@ private fun SourceChips(selected: SourceFilter, onSelect: (SourceFilter) -> Unit
             .padding(horizontal = Dim.screen, vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Chip("全部", selected == SourceFilter.ALL) { onSelect(SourceFilter.ALL) }
-        Chip("本机", selected == SourceFilter.LOCAL) { onSelect(SourceFilter.LOCAL) }
-        Chip("云端", selected == SourceFilter.CLOUD) { onSelect(SourceFilter.CLOUD) }
+        Chip("全部 $total", selected == SourceFilter.ALL) { onSelect(SourceFilter.ALL) }
+        Chip("本机 $local", selected == SourceFilter.LOCAL) { onSelect(SourceFilter.LOCAL) }
+        if (cloud > 0) {
+            Chip("云端 $cloud", selected == SourceFilter.CLOUD) { onSelect(SourceFilter.CLOUD) }
+        }
     }
 }
 

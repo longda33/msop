@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 方形背景 + 居中圆形 logo：背景铺满方形，前景是缩小内缩的圆形图标 -->
+    <background android:drawable="@color/msop_icon_background" />
+    <foreground android:drawable="@drawable/msop_icon_fg" />
+</adaptive-icon>

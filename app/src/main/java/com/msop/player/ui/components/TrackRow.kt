@@ -137,6 +137,16 @@ fun TrackRow(
     var infoOpen by remember { mutableStateOf(false) }
 
     Box {
+        if (isCurrent) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .width(2.5.dp)
+                    .height(34.dp)
+                    .clip(RoundedCornerShape(topEnd = 3.dp, bottomEnd = 3.dp))
+                    .background(Palette.BlueLight),
+            )
+        }
         Row(
             modifier = modifier
                 .fillMaxWidth()

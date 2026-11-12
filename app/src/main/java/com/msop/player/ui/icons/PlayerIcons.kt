@@ -146,6 +146,22 @@ object PlayerIcons {
             }
         }
     }
+
+    /** 定时：表盘 + 指针 + 顶部按钮 */
+    val Timer: ImageVector by lazy {
+        icon("Timer") {
+            stroke {
+                moveTo(4.4f, 13.4f)
+                arcTo(7.6f, 7.6f, 0f, isMoreThanHalf = true, isPositiveArc = true, x1 = 19.6f, y1 = 13.4f)
+                arcTo(7.6f, 7.6f, 0f, isMoreThanHalf = true, isPositiveArc = true, x1 = 4.4f, y1 = 13.4f)
+                moveTo(12f, 9.6f)
+                verticalLineTo(13.9f)
+                lineTo(14.9f, 15.7f)
+                moveTo(9.4f, 2.6f)
+                horizontalLineTo(14.6f)
+            }
+        }
+    }
 }
 
 private fun icon(name: String, block: ImageVector.Builder.() -> Unit): ImageVector =

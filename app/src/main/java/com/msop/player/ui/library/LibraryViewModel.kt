@@ -1,5 +1,6 @@
 package com.msop.player.ui.library
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.msop.player.core.database.dao.TrackDao
@@ -8,6 +9,7 @@ import com.msop.player.core.model.Track
 import com.msop.player.feature.player.PlaybackController
 import com.msop.player.feature.player.PlaybackState
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -28,7 +30,22 @@ import javax.inject.Inject
 class LibraryViewModel @Inject constructor(
     trackDao: TrackDao,
     private val playback: PlaybackController,
+    @ApplicationContext private val context: Context,
 ) : ViewModel() {
+
+    private val prefs = context.getSharedPreferences("msop_ui_prefs", Context.MODE_PRIVATE)
+
+    /** 最近搜索，新的在前。 */
+    private val _recentSearches = MutableStateFlow(readList(KEY_RECENT_SEARCHES))
+    val recentSearches: StateFlow<List<String>> = _recentSearches.asStateFlow()
+
+    /** 最近播放的 trackId，新的在前。 */
+    private val _recentPlayedIds = MutableStateFlow(readList(KEY_RECENT_PLAYED))
+    val recentPlayedIds: StateFlow<List<String>> = _recentPlayedIds.asStateFlow()
+
+    /** 收藏的 trackId。 */
+    private val _favorites = MutableStateFlow(readSet(KEY_FAVORITES))
+    val favorites: StateFlow<Set<String>> = _favorites.asStateFlow()
 
     val tracks: StateFlow<List<Track>> = trackDao.observeAll()
         .map { entities -> entities.map { it.toTrack() } }
@@ -52,6 +69,7 @@ class LibraryViewModel @Inject constructor(
         if (list.isEmpty()) return
         val safeIndex = index.coerceIn(0, list.lastIndex)
         _queue.value = list
+        recordPlayed(list[safeIndex].id)
         viewModelScope.launch {
             playback.playQueue(list, safeIndex)
             _positionMs.value = 0L
@@ -85,5 +103,43 @@ class LibraryViewModel @Inject constructor(
     /** 播放页每 500ms 调一次。页面不可见时不要调。 */
     fun refreshPosition() = viewModelScope.launch {
         _positionMs.value = playback.currentPositionMs()
+    }
+
+    fun addSearch(query: String) {
+        val q = query.trim()
+        if (q.isEmpty()) return
+        val next = (listOf(q) + _recentSearches.value.filter { it != q }).take(12)
+        _recentSearches.value = next
+        prefs.edit().putString(KEY_RECENT_SEARCHES, next.joinToString("\n")).apply()
+    }
+
+    fun clearSearches() {
+        _recentSearches.value = emptyList()
+        prefs.edit().remove(KEY_RECENT_SEARCHES).apply()
+    }
+
+    fun toggleFavorite(id: String) {
+        val next = _favorites.value.toMutableSet()
+        if (!next.add(id)) next.remove(id)
+        _favorites.value = next
+        prefs.edit().putStringSet(KEY_FAVORITES, next).apply()
+    }
+
+    private fun recordPlayed(id: String) {
+        val next = (listOf(id) + _recentPlayedIds.value.filter { it != id }).take(30)
+        _recentPlayedIds.value = next
+        prefs.edit().putString(KEY_RECENT_PLAYED, next.joinToString("\n")).apply()
+    }
+
+    private fun readList(key: String): List<String> =
+        prefs.getString(key, null)?.split("\n")?.filter { it.isNotBlank() } ?: emptyList()
+
+    private fun readSet(key: String): Set<String> =
+        prefs.getStringSet(key, null) ?: emptySet()
+
+    private companion object {
+        const val KEY_RECENT_SEARCHES = "recent_searches"
+        const val KEY_RECENT_PLAYED = "recent_played"
+        const val KEY_FAVORITES = "favorites"
     }
 }

@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -98,6 +100,7 @@ fun MsopApp(
     val queue by viewModel.queue.collectAsStateWithLifecycle()
     val playback by viewModel.playbackState.collectAsStateWithLifecycle()
     val positionMs by viewModel.positionMs.collectAsStateWithLifecycle()
+    val favorites by viewModel.favorites.collectAsStateWithLifecycle()
 
     var playerOpen by rememberSaveable { mutableStateOf(false) }
     var queueOpen by rememberSaveable { mutableStateOf(false) }
@@ -173,6 +176,10 @@ fun MsopApp(
                 navController = navController,
                 startDestination = "library",
                 modifier = Modifier.padding(innerPadding),
+                enterTransition = { fadeIn(tween(220)) },
+                exitTransition = { fadeOut(tween(160)) },
+                popEnterTransition = { fadeIn(tween(220)) },
+                popExitTransition = { fadeOut(tween(160)) },
             ) {
                 composable("library") {
                     LibraryScreen(
@@ -210,6 +217,8 @@ fun MsopApp(
                 onSeek = { viewModel.seekTo(it) },
                 onCycleMode = { viewModel.cycleMode() },
                 onOpenQueue = { queueOpen = true },
+                isFavorite = currentTrack?.id?.let { it in favorites } ?: false,
+                onToggleFavorite = { currentTrack?.id?.let(viewModel::toggleFavorite) },
             )
         }
 
@@ -243,6 +252,11 @@ private fun BottomNav(
     ) {
         TABS.forEach { tab ->
             val active = isActive(tab.route)
+            val wash by animateColorAsState(
+                targetValue = if (active) Palette.BlueWash else Color.Transparent,
+                animationSpec = tween(220),
+                label = "navWash",
+            )
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -252,7 +266,7 @@ private fun BottomNav(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(999.dp))
-                        .background(if (active) Palette.BlueWash else Color.Transparent)
+                        .background(wash)
                         .padding(horizontal = 20.dp, vertical = 5.dp),
                     contentAlignment = Alignment.Center,
                 ) {

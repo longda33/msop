@@ -1,5 +1,7 @@
 package com.msop.player.ui.components
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -20,6 +22,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,6 +51,11 @@ fun MiniPlayer(
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val animatedProgress by animateFloatAsState(
+        targetValue = progress.coerceIn(0f, 1f),
+        animationSpec = tween(600),
+        label = "miniProgress",
+    )
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -101,7 +109,7 @@ fun MiniPlayer(
             }
         }
         MiniProgress(
-            progress = progress,
+            progress = animatedProgress,
             modifier = Modifier.align(Alignment.BottomCenter),
         )
     }
