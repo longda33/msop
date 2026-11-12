@@ -13,3 +13,9 @@ captures/
 .kotlin/
 *.log
 .workbuddy-ai/
+
+# P6-02 自签名 release 密钥与本机密码，绝不入库
+app/release.jks
+keystore.properties
+*.jks
+*.keystore

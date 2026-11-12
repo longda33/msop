@@ -21,6 +21,7 @@ android {
 dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:common"))
+    implementation(project(":core:network"))
 
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.session)

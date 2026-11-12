@@ -1,14 +1,16 @@
 package com.primuse.lite
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.primuse.lite.feature.local.saf.SafDirectoryStore
 import com.primuse.lite.feature.local.work.LocalScanScheduler
 import com.primuse.lite.ui.PrimuseApp
@@ -45,17 +47,28 @@ class MainActivity : ComponentActivity() {
                     },
                 ) {
                     val viewModel: LibraryViewModel = hiltViewModel()
-                    var directoryCount by remember {
-                        mutableIntStateOf(safDirectories.treeUris().size)
-                    }
+                    var directories by remember { mutableStateOf(safDirectories.treeUris()) }
 
                     PrimuseApp(
                         viewModel = viewModel,
-                        directoryCount = directoryCount,
+                        directories = directories,
                         onRescan = { scanScheduler.enqueue(full = true) },
                         onDirectoryPicked = { uri ->
                             safDirectories.add(uri.toString())
-                            directoryCount = safDirectories.treeUris().size
+                            directories = safDirectories.treeUris()
+                            scanScheduler.enqueue(full = true)
+                        },
+                        onRemoveDirectory = { treeUri ->
+                            safDirectories.remove(treeUri)
+                            // 授权要一起还回去，否则系统会一直保留这个 tree URI 的读权限
+                            runCatching {
+                                contentResolver.releasePersistableUriPermission(
+                                    Uri.parse(treeUri),
+                                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                                )
+                            }
+                            directories = safDirectories.treeUris()
+                            // 只有全量重扫才会清理不在库里的幽灵条目
                             scanScheduler.enqueue(full = true)
                         },
                     )

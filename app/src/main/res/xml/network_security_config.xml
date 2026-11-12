@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  公网访问的安全基线（P3-06）。
+
+  cleartextTrafficPermitted=false：全局禁止明文 HTTP。没有在 manifest 里开
+  usesCleartextTraffic，也不做 trust-all。配置页填 http:// 时会弹警告并要求
+  二次确认，但系统层仍会拒绝明文连接——这是有意的：用户的服务器是公网 HTTPS，
+  为一个自用 App 开明文后门不值得。局域网调试请用 HTTPS 或自行调整本文件。
+
+  user CA：允许用户在系统设置里导入自签证书后连自己的服务器（决策 D8），
+  比信任所有证书安全，比替换服务端证书省事。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

@@ -2,9 +2,13 @@ package com.primuse.lite.feature.player
 
 import android.app.PendingIntent
 import android.content.Intent
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.primuse.lite.core.common.log.AppLog
+import com.primuse.lite.feature.player.equalizer.EqualizerController
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 /**
  * 后台播放服务。
@@ -14,15 +18,38 @@ import com.primuse.lite.core.common.log.AppLog
  * 一个 Player 和一个 MediaSession。
  *
  * 服务生命周期由 Media3 管：控制器连上来就创建，播放结束且任务被移除才停。
+ *
+ * **均衡器挂在这里（P5-03）**：`Equalizer` 必须绑到 ExoPlayer 的 audioSessionId，
+ * 而 UI 侧只有 MediaController，拿不到 session。服务和 UI 同进程，两边注入同一个
+ * [EqualizerController] 单例，在 `onAudioSessionIdChanged` 时 attach 即可。
  */
+@AndroidEntryPoint
 class PlaybackService : MediaSessionService() {
+
+    @Inject
+    lateinit var equalizer: EqualizerController
+
+    @Inject
+    lateinit var playerFactory: PlayerFactory
 
     private var mediaSession: MediaSession? = null
 
     override fun onCreate() {
         super.onCreate()
         AppLog.i("PlaybackService onCreate")
-        val player = PlayerFactory(this).create()
+        val player = playerFactory.create()
+
+        player.addAnalyticsListener(object : AnalyticsListener {
+            override fun onAudioSessionIdChanged(
+                eventTime: AnalyticsListener.EventTime,
+                audioSessionId: Int,
+            ) {
+                equalizer.attach(audioSessionId)
+            }
+        })
+        // 少数 ROM 在监听器注册之前就分配了 sessionId，兜一次底
+        if (player.audioSessionId > 0) equalizer.attach(player.audioSessionId)
+
         val builder = MediaSession.Builder(this, player)
         // 点通知要能回到应用；拿不到启动 Intent 时就不设，Media3 会用默认行为
         launchIntent()?.let(builder::setSessionActivity)
@@ -51,6 +78,8 @@ class PlaybackService : MediaSessionService() {
             release()
         }
         mediaSession = null
+        // AudioEffect 是全局资源，服务没了必须释放；设置本身留在 SharedPreferences 里
+        equalizer.release()
         super.onDestroy()
     }
 

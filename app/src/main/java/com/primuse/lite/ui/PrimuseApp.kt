@@ -84,9 +84,10 @@ private val TABS = listOf(
 @Composable
 fun PrimuseApp(
     viewModel: LibraryViewModel,
-    directoryCount: Int = 0,
+    directories: List<String> = emptyList(),
     onRescan: () -> Unit = {},
     onDirectoryPicked: (Uri) -> Unit = {},
+    onRemoveDirectory: (String) -> Unit = {},
 ) {
     val context = LocalContext.current
     val navController = rememberNavController()
@@ -184,8 +185,9 @@ fun PrimuseApp(
                 }
                 composable("settings") {
                     SettingsScreen(
-                        directoryCount = directoryCount,
+                        directories = directories,
                         onAddDirectory = { treePicker.launch(null) },
+                        onRemoveDirectory = onRemoveDirectory,
                         onRescan = onRescan,
                     )
                 }
@@ -220,6 +222,7 @@ fun PrimuseApp(
                     viewModel.play(queue, index)
                     queueOpen = false
                 },
+                onMove = { from, to -> viewModel.moveInQueue(from, to) },
             )
         }
     }

@@ -1,9 +1,21 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
 }
+
+// P6-02：自签名 release。keystore.properties 与 .jks 都不入库（见 .gitignore）。
+// 没有密钥的机器上仍能打 release 包（退回 debug 签名），不会让 CI 直接失败。
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) load(FileInputStream(keystorePropertiesFile))
+}
+val storeFilePath = keystoreProperties.getProperty("storeFile", "")
+val hasReleaseKeystore = storeFilePath.isNotBlank() && rootProject.file(storeFilePath).exists()
 
 android {
     namespace = "com.primuse.lite"
@@ -17,13 +29,29 @@ android {
         versionName = "0.1.0"
     }
 
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                storeFile = rootProject.file(storeFilePath)
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             isMinifyEnabled = false
         }
         release {
-            // P6-02 再打开混淆；现在关掉以免 R8 规则干扰前期开发。
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = if (hasReleaseKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -67,6 +95,9 @@ dependencies {
     implementation(libs.compose.material3)
     implementation(libs.compose.material.icons.core)
     implementation(libs.coil.compose)
+    // Coil 3 的网络 fetcher 是独立模块：不加这个，远程封面（https）永远加载不出来，
+    // 而本地 file:// 封面照常显示，很容易误判成服务端问题。
+    implementation(libs.coil.network.okhttp)
     debugImplementation(libs.compose.ui.tooling)
 
     implementation(libs.androidx.core.ktx)
@@ -79,6 +110,8 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
+
+    testImplementation(libs.junit)
 
     // WorkManager 的 Hilt 集成：Application 要实现 Configuration.Provider 并提供 HiltWorkerFactory
     implementation(libs.hilt.work)
