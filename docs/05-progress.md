@@ -484,6 +484,57 @@
 
 ---
 
+### 2026-11-11 · P3-01 ~ P3-07 · OpenList 远程音源端到端打通（阻塞解除）
+
+- 做了什么：
+  1. 用户提供真实公网地址与账号，P3 阻塞解除。**先实测再写码**：本机默认代理对 `*.koyeb.app` 返回 502、直连超时，只有 `--proxy http://127.0.0.1:10808` 通。结论：OpenList v4.2.9 **未启用 Subsonic**（真实路由 `@rest` 前缀返回 404，`media_enabled=false`，账号 `role=0` 非 admin 无法开启）；WebDAV `PROPFIND /dav/` 返回 207 可用但 GET 是 302；**原生 REST 全通**且 `raw_url` 支持 206 Range。据实测反证把决策 D3 从 Subsonic 修订为「OpenList 原生 REST 主通道」，完整响应样例见 `docs/03` §6。
+  2. `core:datastore` 落地服务器配置 + JWT 缓存；`core:network` 落地 `ServerUrl`（补协议/去尾斜杠/剥误粘页面名 + `HttpUrl.addPathSegments` 拼路径）、`OpenListClient`（登录、列目录、取直链、401 重登、HTTP 码与业务码双层映射、中文错误）、`StreamUrlResolver` + Hilt `@Binds`。
+  3. `feature:remote` 落地 `RemoteIdFactory`、`RemoteTrackMapper`、`RemoteLibrarySyncer`（BFS 递归列目录、音频后缀过滤、按 `idsBySource` 做差集清理、扫到 0 首时跳过清理的安全阀）。
+  4. `PlayerFactory` 的 `ResolvingDataSource` 从恒等转发换成真实接缝：起播 / seek 重新打开 DataSpec 时把 `openlist:/路径` 换成新鲜 `raw_url`；`PlayerFactory` 改由 Hilt 注入，`PlaybackService` 用 `@Inject`。
+  5. `network_security_config.xml` 全局禁明文 + 允许 user CA；配置页支持 URL 规范化、`http://` 二次确认、测试连接、保存并同步、清除配置与远程曲目。
+- 改了哪些文件：新增 `core/datastore/{ServerConfig,ServerConfigStore}.kt`、`core/network/{ServerUrl,OpenListDtos,OpenListException,StreamUrlResolver,OpenListClient}.kt` + `di/NetworkModule.kt`、`feature/remote/{RemoteIdFactory,RemoteTrackMapper,RemoteLibrarySyncer}.kt`、`app/ui/settings/{OpenListConfigScreen,OpenListViewModel,BatteryOptimization}.kt`、`app/src/main/res/xml/network_security_config.xml`、`USAGE.md`；修改 `PlayerFactory.kt`、`PlaybackService.kt`、`PrimuseApp.kt`、`SettingsScreen.kt`、`MainActivity.kt`、`AndroidManifest.xml`、4 个模块的 `build.gradle.kts`、`docs/03-openlist-api.md`、`AGENTS.md`、`TASKS.md`。删除三个已落地模块的 `ModuleMarker.kt`。
+- 验证方式：
+  - `./gradlew test` → debug **18 文件 / 154 用例 0 失败**（新增 40 个：URL 规范化 11、均衡器 14、远程映射 9、队列拖拽 6）。
+  - 真机（emulator-5554 / Android 12，设 `settings put global http_proxy 10.0.2.2:10808` 借道主机代理）：保存并同步 → `扫描 23 项 · 写入 23 首 · 清理 0 条 · 454 ms`，DB `LOCAL|508 / OPENLIST|23`；搜索「Butter-Fly」命中远程歌；点播 → `state=3`、`CCodecConfig: audio/flac`、无 `ExoPlaybackException`；拖动进度条 → position `68129 → 208546` 且仍 `state=3`（Range + 直链刷新都生效）。
+- 遗留问题：P3-04 的 `SimpleCache` 与「仅 Wi-Fi 预加载」、P3-05 WebDAV 兜底未做；服务端无封面、列目录无时长（列表显示 `--:--`，播放页由 Media3 解析正确）；模拟器留了全局 `http_proxy` 设置（可 `adb shell settings delete global http_proxy` 还原）。
+- 给下一位的提醒：**三条硬规律别破**——① `raw_url` 带 tempauth 有时效，绝不入库，只存 `openlist:/路径`；② GET 直链**不能**带 `Authorization`（实测加 JWT 会 401），完全交给 Media3；③ HTTP 200 也可能是业务码 401，两层都要判。另外 **KDoc 里写 `/@rest/*` 这种字面量会开启 Kotlin 块注释**，一路吞到文件末尾、报错显示在最后一行且 KSP 会伪装成「类无法解析」——本轮踩过一次。
+
+---
+
+### 2026-11-11 · P5-03 / P5-05 / 已知缺口 / P6-02 / P6-03 · 打磨与打包
+
+- 做了什么：
+  1. **均衡器**：`EqualizerTuning`（纯 JVM：10 段标准曲线、7 个预设、对数频率最近邻映射、mB 单位钳制）+ `EqualizerController`（SharedPreferences 持久化、`@Synchronized`、attach/release）。`PlaybackService` 在 `onAudioSessionIdChanged` attach；UI 按**设备实际 band 数**画滑杆（这台只有 5 段），回写时映射回标准 10 段模型。
+  2. **关 offload**：Media3 1.11 **删掉了** `DefaultRenderersFactory.setEnableAudioOffload`，改用 `AudioTrackAudioOutputProvider.Builder.setAudioOffloadSupportProvider` 上报 `AudioOffloadSupport.DEFAULT_UNSUPPORTED`。不关的话 EQ 会「开着没效果」。
+  3. **后台保活**：`stopWithTask=false`、`MODIFY_AUDIO_SETTINGS`、设置页显示电池优化豁免状态并跳系统弹窗，回前台用 `LifecycleEventObserver(ON_RESUME)` 重判。
+  4. **补两个已知缺口**：设置页「本机目录」改成可列出/移除目录（移除时释放 persistableUriPermission + 全量重扫）；队列加长按手柄拖拽（拖动中只累计位移+高亮，松手才 `moveInQueue`，避免 Compose 重组吞手势）。
+  5. **release 打包**：生成自签名 `app/release.jks` + `keystore.properties`（都进 `.gitignore`），`isMinifyEnabled/isShrinkResources = true`，补 R8 规则（重点是 kotlinx.serialization 的 `$$serializer`）；`USAGE.md` 交付。
+- 验证方式：
+  - `sh scripts/check.sh` 六项全过；`./gradlew test` 通过；`:app:assembleDebug` 19.3 MB、`:app:assembleRelease` **3.0 MB**（5m4s，V2 签名 `apksigner verify` 通过）。
+  - 均衡器真机：显示「已连接播放器 · 5 段 · 已关闭 audio offload」，点「摇滚」后 5 段变为 `+3.5/-1.0/+1.0/+3.5/+4.0 dB`，logcat `均衡器预设=摇滚`，设置页变「已启用」。
+  - **release 包真机回归**（先 `adb uninstall` 再装）：权限门禁 → 授予 → 本地扫描出歌 → 配置页输入域名/账号/密码 → 自动补 `https://` → 同步 `23 首 / 867 ms` → 搜索远程歌 → 播放 `state=3`、metadata 正确、`AndroidRuntime:E` 与 `ExoPlaybackException` 均无输出。R8 没有误删 Media3 / Hilt / Room / kotlinx.serialization。
+- 遗留问题：P5-04 大库性能、P6-01 走查清单未逐条勾；`./gradlew test` 偶发一次 `kspReleaseKotlin` 报 `OpenListClient could not be resolved`（debug/release 并行竞态，重跑即过，非代码问题）；`lintVitalRelease` 会误报 `PlaybackService` 的 `Instantiatable`（服务在 feature 模块、父类来自 implementation 依赖），manifest 已局部 `tools:ignore`，别删。
+- 给下一位的提醒：release 与 debug **签名不同**，互相覆盖安装必须 `adb uninstall`（会清曲库/歌单/服务器配置）。`keystore.properties` 与 `.jks` 绝不入库；换机器按 `USAGE.md` §6 重新生成即可，没有密钥时构建会退回 debug 签名而不是失败。
+
+---
+
+### 2026-11-11 晚 · P3 · Subsonic 启用后改为混合通道（元数据 + 真实封面）
+
+- 做了什么：
+  1. 用户启用 OpenList 媒体库并提供**媒体应用密钥**。先读 v4.2.9 源码 `server/handles/subsonic.go` 的 `subAuthInner`，再实测四种鉴权：**只有 `apiKey=<应用密钥>` 通**；`u`+`t`(md5) 与 `u`+`p` 都返回 `code=40`。
+  2. 六接口实测：`ping/getMusicFolders/getArtists/getAlbumList2/getAlbum/getSong/search3/getCoverArt` 全通；**`search3` 空查询一次返回全部 23 首**（省掉 22 次 `getAlbum`）；`getCoverArt` 返回真实 `image/jpeg` 129 KB；`getLyricsBySongId` 返回 `code=70`。
+  3. 两个否决项：`stream` 302 跳到 **`http://`** 明文 `/d/...?sign=`，被 `network_security_config` 拦；Subsonic 的 `path` 是服务器绝对路径，喂给 `/api/fs/get` 返回 `500 object not found`（要相对用户根目录的路径）。**因此流播不切 Subsonic**。
+  4. 落地混合方案：`core:network` 新增 `SubsonicDtos` / `SubsonicClient`（`@rest` + `apiKey`、`search3` 分页、`HttpUrl` 拼 `getCoverArt`、错误码 40/50 归为鉴权失败）；`core:datastore` 配置加可选 `appKey`；`feature:remote` 新增 `SubsonicMetadata`（按**文件名**匹配，纯函数），同步后补全 `title/artist/album/albumId/mimeType/size/coverUri`，失败只降级；配置页加「Subsonic 应用密钥（可选）」并显示是否启用。
+  5. 修掉两个「静默不显示」的封面 bug：① app 只依赖 `coil-compose`、**缺 `coil-network-okhttp`**，本地 `file://` 正常、远程 `https://` 静默失败；② 补依赖后 debug 正常、**release 又变占位**——R8 删掉了 Coil 的 `META-INF/services/coil3.util.FetcherServiceLoaderTarget` 与实现类。最终在 `PrimuseApplication` 显式实现 `SingletonImageLoader.Factory` 并 `add(OkHttpNetworkFetcherFactory())`，proguard 里加 keep 兜底。
+- 改了哪些文件：新增 `core/network/{SubsonicDtos,SubsonicClient}.kt`、`feature/remote/SubsonicMetadata.kt`、`feature/remote/src/test/.../SubsonicMetadataTest.kt`；修改 `core/datastore/{ServerConfig,ServerConfigStore}.kt`、`feature/remote/RemoteLibrarySyncer.kt`、`app/ui/settings/{OpenListViewModel,OpenListConfigScreen}.kt`、`app/build.gradle.kts`（coil 依赖）、`docs/03`（新增 §7）、`AGENTS.md`、`TASKS.md`、`USAGE.md`。
+- 验证方式：
+  - `:core:network:testDebugUnitTest`、`:feature:remote:testDebugUnitTest`、`:app:assembleDebug` 全过；`SubsonicMetadataTest` 11 个用例。
+  - 真机（emulator-5554）：配置页输入 45 位密钥 → `同步完成：扫描 23 项 · 写入 23 首 · 补全 23 首 · 清理 0 条 · 8476 ms`；DB `23 首 / 23 有封面 / 23 有艺术家 / 23 有 albumId`；样本 `Rage Your Dream · m.o.v.e · 頭文字D Final Best Collection`；列表显示真实 JPEG 封面，Coil 磁盘缓存 180 KB；点播 `state=3`、metadata 正确、无 `ExoPlaybackException`。
+- 遗留问题：远程歌词服务端没有；`duration` 仍拿不到（列表 `--:--`，播放页由 Media3 解析）；P3-04/05、P5-04、P6-01 未做。
+- 给下一位的提醒：**Subsonic 与原生 REST 各管一段，不要混用**——Subsonic 只用来取元数据和封面，流播一律走 `/api/fs/get`。配置里的「密码」是 OpenList 登录密码，「应用密钥」是 Subsonic 的 `apiKey`，两者不能互换。排查封面问题时先看 `coil-network-okhttp` 是否还在依赖里。
+
+---
+
 ## P6-01 真机走查清单
 
 > 全部通过才能打包。每条记录「通过 / 不通过 + 现象」。

@@ -10,11 +10,11 @@
 如果你只想看六条：
 
 1. **这是什么**：安卓音乐播放器，Kotlin + Compose + Media3，只读本机文件 + 对接公网 OpenList，自用不上架。
-2. **做到哪了**：Gradle 多模块骨架（12 模块）、本地扫描入库、播放内核、UI、歌单、歌词都已完成并真机验收。本机具 Microsoft OpenJDK 21 + Android SDK，设备可通过 `adb connect 127.0.0.1:5555` 或 `-s emulator-5554` 连接。**该目录是 git 仓库**（2026-11-11 首个 commit，之后有若干未提交改动）。
-3. **立刻该做什么**：唯一的大块是 **C 远程音源 P3-01**，但它**被真实 OpenList 地址与账号阻塞**——没有服务器就不要写 Subsonic 客户端。可先做的不依赖远程的任务：P5-03 均衡器、P5-05 后台保活、P6-02 release 构建、P6-03 使用说明。
+2. **做到哪了**：**核心功能全部打通并真机验收**——12 模块骨架、本地扫描入库、播放内核、UI、歌单、歌词、均衡器、后台保活、**OpenList 远程音源（原生 REST 同步 + 流播 + seek，Subsonic 补艺术家/专辑/真实封面）**、release 自签名包、`USAGE.md`。本机具 Microsoft OpenJDK 21 + Android SDK，设备可用 `adb -s emulator-5554`（或 `127.0.0.1:5555`）。**该目录是 git 仓库**。
+3. **立刻该做什么**：没有阻塞项了。剩余都是可选项：P3-04 `SimpleCache` 缓存 / Wi-Fi 预加载、P3-05 WebDAV 兜底、P5-04 大库性能、P6-01 走查清单逐条勾。要做远程相关改动前**先读 `docs/03` §6 与 §7 的实测结论**（Subsonic 与原生 REST 各管一段，别把两者混着用）。
 4. **什么能碰**：`app/src/main/java/com/primuse/lite/ui/` 是正式 UI，可以直接改。`feature/*/ui/` 仍然空着——UI 没有按模块拆，全部集中在 app 模块（原因见 §5 的说明）。
-5. **可以并行做什么**：P5 打磨（均衡器/保活）与 P6 打包文档，这两块与远程音源无关。
-6. **最容易踩的坑**：AGP 9 内置 Kotlin，**不要**应用 `org.jetbrains.kotlin.android`；URL 拼接**不要**用字符串；Room 迁移**不要**开 destructive。`ffmpeg -metadata lyrics=` 写的是 `TXXX:USLT`，不是真正的 `USLT` 帧。
+5. **可以并行做什么**：上面四项互不依赖。远程音源主通道是 **OpenList 原生 REST**（不是 Subsonic），别按旧文档写客户端。
+6. **最容易踩的坑**：AGP 9 内置 Kotlin，**不要**应用 `org.jetbrains.kotlin.android`；URL 拼接**不要**用字符串；Room 迁移**不要**开 destructive；`ffmpeg -metadata lyrics=` 写的是 `TXXX:USLT`；**KDoc 里出现 `/*` 会开启块注释**（写 `/@rest/*` 这种字面量会一路吞到文件末尾）；Media3 1.11 已删 `setEnableAudioOffload`。
 
 ## 1. 项目是什么
 
@@ -26,17 +26,17 @@
 
 | 项 | 值 |
 |---|---|
-| 阶段 | **P0 / P1 / P2 / P4 完成 · P5 本地部分完成（P5-01 远程待 P3）· P3 被 OpenList 服务器阻塞** |
-| 代码量 | Kotlin 源码 **88 个**（main 74 + test 14；单测 14 个文件 / 114 个用例） |
-| 测试 | ✅ `.\gradlew.bat test` → **114 个测试，0 失败**（core:database 4 + feature:local 82 + feature:lyrics 28；播放层靠真机验收，未加单测） |
-| 真机验证 | ✅ 已在 **OPPO PJB110 / Android 12 (API 32)** 上验证：三 Tab、日志、权限门禁、扫描入库、通知、SAF 目录、幽灵清理、标签补齐、封面落盘与回收、**MP3/WAV/FLAC 播放、后台播放、通知栏与媒体键控制、单曲循环与随机、耳机拔出暂停、来电打断与挂断续播**；**歌单持久化（含 v1→v2 迁移）、播放页模糊背景与滑动收起、歌词高亮/跳转/手动回中**。性能：1003 首全量 376ms、增量 35ms；1006 条双通道去重后 503 首 635ms；30 首封面预热 400ms |
-| 构建状态 | ✅ **已验证**：`./gradlew tasks`、`:app:assembleDebug`、`installDebug` 全部成功（增量约 1m；APK 19.3 MB）。本机具 Microsoft OpenJDK 21 + Android SDK（android-37 / build-tools 37.0.0）。真机连接方式见 §8「真机调试速查」 |
-| 版本控制 | ✅ 是 git 仓库（2026-11-11 首个 commit）；UI、歌词、歌单与播放页手势为最近一轮改动，提交状态见 `git status` |
-| UI 状态 | ✅ **已真机验收**（2026-11-11，emulator-5554 / PJB110 / 450×800dp）：三 Tab、五种列表视图、专辑详情、播放页（封面/歌词双态）、队列、搜索、设置全部走通；歌单新建/改名/加歌/删歌并在重启后保持；播放页模糊封面、上滑队列、下滑收起；歌词高亮与点击 seek；设置页封面缓存大小与清理。APK 19.3 MB |
-| 下一步 | 见 §8 |
-| 本机音乐位置 | 默认 MediaStore 标准目录，用户可追加 SAF 自定义目录 |
-| OpenList 部署 | 公网域名 + HTTPS，可能有反代子路径、可能自签证书，两种挂法都要支持 |
-| 最后更新 | 2026-11-11（P4-03 / P4-04 / P5-01 本地部分 / P5-02 完成并真机验收） |
+| 阶段 | **P0–P4 完成 · P3 远程音源核心链路全通（原生 REST 流播 + Subsonic 元数据/封面）· P5-03/05 完成 · P6-02/03 完成**。只剩 4 个非阻塞可选项（P3-04 缓存、P3-05 WebDAV、P5-04 性能、P6-01 清单走查） |
+| 代码量 | Kotlin 源码 **109 个**（main 90 + test 19） |
+| 测试 | ✅ `.\gradlew.bat test` → **debug 19 个文件 / 165 个用例，0 失败**（另 release 变体复跑 app 的 6 个用例）。本轮新增 `ServerUrlTest` 11、`EqualizerTuningTest` 14、`RemoteTrackMapperTest` 9、`QueueReorderTest` 6、`SubsonicMetadataTest` 11 |
+| 真机验证 | ✅ 历轮已验：三 Tab、扫描入库、通知、SAF、幽灵清理、标签/封面、MP3/WAV/FLAC 播放、后台/通知栏/媒体键、循环与随机、耳机拔出、来电打断续播、歌单持久化、播放页手势、歌词、封面清理。**本轮新增**：OpenList 配置/测试/同步（23 首 454ms）、远程 FLAC 播放与拖动 seek（68s→208s）、均衡器预设实时生效（设备 5 段）、目录管理弹窗、release 包全套回归；**Subsonic 启用后**：23 首全部补全艺术家/专辑/封面（8476ms）、真实 JPEG 封面（129KB，Coil 缓存 180KB）、播放 `state=3` 元数据正确 |
+| 构建状态 | ✅ `./gradlew tasks`、`test`、`:app:assembleDebug`（19.3 MB）、`:app:assembleRelease`（**3.0 MB**，R8 + V2 自签名）全部成功。release 首轮约 5m。SDK：android-37 / build-tools 37.0.0 |
+| 版本控制 | ✅ git 仓库。`app/release.jks` 与 `keystore.properties` 已加入 `.gitignore`，**不要提交** |
+| UI 状态 | ✅ **`app/ui/` 22 个界面文件**，本轮新增 `EqualizerScreen`、`OpenListConfigScreen`、`QueueReorder`。所有设置行都能点出真实功能 |
+| 下一步 | 见 §8（4 个可选打磨项） |
+| 本机音乐位置 | 默认 MediaStore 标准目录，可追加 / **移除** SAF 自定义目录 |
+| OpenList 部署 | **已实测**：OpenList v4.2.9 公网 HTTPS。Subsonic 后已启用，鉴权只认 `apiKey`，负责元数据与封面；流播仍走原生 REST。详见 `docs/03` §6（原生 REST）与 §7（Subsonic） |
+| 最后更新 | 2026-11-11 晚（Subsonic 元数据增强 + 真实封面 + Coil 网络依赖修复） |
 
 **每次完成任务后必须更新三处**：本节、`TASKS.md` 对应勾选框、`docs/05-progress.md` 追加一条。
 
@@ -75,10 +75,10 @@
 :core:model               Track / Album / Artist / SourceType     ✅ 已实现
 :core:common              工具、日志、SAF 授权根目录                 ✅ 已实现
 :core:database            Room 实体、DAO、v1→v2 迁移               ✅ 已实现
-:core:network             Subsonic 客户端、WebDAV 兜底、鉴权        ⬜ 仅占位
-:core:datastore           设置项（服务器地址、账号、扫描目录）       ⬜ 仅占位
+:core:network             OpenList 原生 REST + Subsonic 元数据客户端  ✅ 已实现
+:core:datastore           服务器配置 + JWT 缓存                    ✅ 已实现
 :feature:local            MediaStore + SAF 扫描入库                ✅ 已实现
-:feature:remote           OpenList 音源                           ⬜ 仅占位
+:feature:remote           远程曲库同步入库                         ✅ 已实现
 :feature:player           ExoPlayer + MediaSessionService         ✅ 播放/通知/队列已实现
 :feature:library          列表页（UI 已落在 app/ui，本模块暂空）      ⬜ 仅占位
 :feature:lyrics           LRC + 内嵌歌词解析                       ✅ 已实现
@@ -101,7 +101,11 @@ app/build.gradle.kts       Compose + Hilt + KSP + 11 个 project 依赖
 app/src/main/              单 Activity + 全部 Compose UI + 主题 + 清单
 core/model/Track.kt        Track / Album / Artist / SourceType + toDurationLabel
 scripts/check.sh           完整性自检，不需要 JDK 就能跑
-每个模块的 ModuleMarker.kt  占位对象，验证依赖图接通，有真实实现后可删
+每个模块的 ModuleMarker.kt  占位对象；已落地的 core:network / core:datastore /
+                           feature:remote 三个已删，其余模块保留
+USAGE.md                   使用说明（P6-03）
+app/proguard-rules.pro     R8 规则（P6-02）
+app/src/main/res/xml/network_security_config.xml  禁明文 + user CA（P3-06）
 ```
 
 **`app/src/main/java/.../ui/` 是正式 UI，不是占位**。三 Tab、五种列表视图、播放页、队列、搜索、设置、歌单全部已落地并真机验收；改 UI 直接从这里改。
@@ -112,9 +116,9 @@ scripts/check.sh           完整性自检，不需要 JDK 就能跑
 enum class SourceType { LOCAL, OPENLIST }
 
 data class Track(
-    val id: String,            // 本地 "local:{sha1(绝对路径)}"；远程 "subsonic:{songId}"
+    val id: String,            // 本地 "local:{sha1(绝对路径)}"；远程 "openlist:{sha1(路径)}"
     val source: SourceType,
-    val uri: String,           // content:// 或 https://.../rest/stream.view?id=
+    val uri: String,           // 本地 content://；远程 "openlist:/路径"（起播时才换成 raw_url）
     val title: String,
     val artist: String? = null,
     val album: String? = null,
@@ -123,7 +127,7 @@ data class Track(
     val trackNo: Int? = null,
     val discNo: Int? = null,
     val year: Int? = null,
-    val coverUri: String? = null,  // 本地：file:// 封面缓存路径（按内容哈希命名，可跨曲目复用）；远程：getCoverArt URL
+    val coverUri: String? = null,  // 本地：file:// 缓存路径；远程：带 apiKey 的 getCoverArt URL（填了应用密钥才有）
     val sizeBytes: Long? = null,
     val mimeType: String? = null,
     val localPath: String? = null, // 仅 LOCAL
@@ -182,30 +186,35 @@ adb root && adb shell am broadcast -a android.media.AUDIO_BECOMING_NOISY && adb 
 
 **⚠️ 这台设备会自动授予权限**，系统弹窗不会出现。想测拒绝流程必须换设备。
 
-### 三条可并行的线（都不依赖 UI）
+### 四条线（全部打通，只剩可选项）
 
 | 线 | 任务 | 状态 |
 |---|---|---|
-| **A 本地数据** | P1-02 ✅ → P1-03 ✅ → P1-04 ⚠️ → P1-05 ✅ → P1-06 ✅ → P1-07 ✅（数据侧）→ P1-08 ✅ → P1-09 ✅ | **收工**，只剩 P1-04 拒绝路径（本机测不了） |
-| **B 播放内核** | P2-01 ✅ → P2-02 ✅ → P2-03 ⚠️（拖拽 UI 待做）→ P2-04 ✅ → P2-05 ✅ | 播放/通知/后台/队列/模式/焦点/拔出耳机/播放页已跑通；只剩 P2-03 的队列拖拽排序 |
-| **C 远程音源** | **P3-01（被阻塞）** → P3-02 → P3-03 → P3-04 → P3-05 → P3-06 → P3-07 | **未开工**。必须先拿到真实 OpenList 地址与账号并实测响应 |
-| **D 打磨** | P5-03 均衡器 → P5-05 保活 → P6-02 release → P6-03 使用说明 | 可立即开工，不依赖远程 |
+| **A 本地数据** | P1-02 ✅ → … → P1-09 ✅ | **收工**，只剩 P1-04 拒绝路径（本机测不了） |
+| **B 播放内核** | P2-01 ✅ → … → P2-05 ✅ | **收工**，队列拖拽排序已接（真机手势未单独验） |
+| **C 远程音源** | P3-01 ✅ 实测 → P3-02 ✅ → P3-03 ✅ → P3-06 ✅ → P3-07 ✅ | **主链路全通**：23 首远程 FLAC 同步 + 播放 + seek 真机验证。剩 P3-04 `SimpleCache`、P3-05 WebDAV 未做 |
+| **D 打磨打包** | P5-03 ✅ → P5-05 ✅ → P6-02 ✅ → P6-03 ✅ | **收工** |
 
-**推荐顺序**：C 被服务器阻塞，先做 D 线；拿到 OpenList 凭据后立刻回到 C 的第一步 P3-01。
-P3-01 必须实测 OpenList 的真实响应，不能照着文档写。
+**剩下的四件事，互不依赖，挑一个做即可**：P3-04 边播边缓存 + 仅 Wi-Fi 预加载；P3-05 WebDAV 兜底；P5-04 5 万首大库性能；P6-01 把 `docs/05` 的走查清单逐条勾完。
 
-### 已知缺口（真机测试发现的，尚未修）
+### 已知缺口 / 注意事项
 
-1. **权限拒绝路径未真机验证** —— 设备自动授权，只有单测覆盖。
-2. **横屏未专门适配** —— 当前界面是竖屏布局，横屏可用但没走查（模拟器 900×1600 竖屏）。
-3. **没有「移除目录」入口** —— 只能添加，不能删。
-4. **标签被删除时同步不过来** —— 扫描给 null，`mergedWithExisting` 会保留旧值。代价换来的是「重扫不丢补出来的数据」，见 `docs/05`。
-5. **M4A / OGG 的内嵌封面与标签未实测** —— MP3 的 `USLT` 已在设备上验证，FLAC 的 Vorbis Comment 只有 JVM 单测；P6-01 走查时补。
-6. **队列拖拽排序未做** —— `moveInQueue` 已就位，UI 没接（P2-03 剩余部分）。
+1. **权限拒绝路径未真机验证** —— 设备自动授权；release 包首次启动的门禁页与「授予」放行已验证，但「点拒绝」测不了。
+2. **横屏未专门适配** —— 竖屏布局，横屏可用但没走查。
+3. **标签被删除时同步不过来** —— 扫描给 null，`mergedWithExisting` 保留旧值。代价换来「重扫不丢补出来的数据」，见 `docs/05`。
+4. **M4A / OGG 的内嵌封面与标签未实测** —— MP3 `USLT` 与远程 FLAC 播放已验证。
+5. **远程曲目列表时长显示 `--:--`** —— 服务端列目录不给时长；播放后 Media3 能解析，播放页显示正确。
+6. **远程封面/艺术家依赖应用密钥** —— 填了 OpenList「媒体应用密钥」才有真实封面与艺术家/专辑；不填则 `coverUri` 为 null、专辑取目录名。Subsonic 的 `getLyricsBySongId` 返回 `code=70`，远程歌词暂时没有。
+7. **`./gradlew test` 偶发 KSP 竞态** —— 并行构建时偶见 `kspReleaseKotlin` 报 `OpenListClient could not be resolved`，**重跑一次即过**（已复现并确认不是代码问题）。别为此改依赖结构。
+8. **release 的 `lintVitalRelease` 会误报 `Instantiatable`** —— `PlaybackService` 在 feature 模块、父类来自 implementation 依赖；manifest 已局部 `tools:ignore`，别删。
+9. **Coil 3 的远程封面有两道坎** —— ① 只依赖 `coil-compose` 时本地 `file://` 正常、远程 `https://` **静默失败**，必须加 `coil-network-okhttp`；② **release 的 R8 + `shrinkResources` 会删掉 Coil 的 `META-INF/services` 注册文件与 fetcher 实现类**，表现是 debug 封面正常、release 全是占位图。已在 `PrimuseApplication` 里显式实现 `SingletonImageLoader.Factory` 并 `add(OkHttpNetworkFetcherFactory())`，`proguard-rules.pro` 里另加了 keep 兜底。排查封面问题先看这两处。
 
 ### UI 已落地并真机验收（2026-11-11）
 
-界面代码在 **`app/src/main/java/com/primuse/lite/ui/`**，共 16 个文件：
+界面代码在 **`app/src/main/java/com/primuse/lite/ui/`**，共 22 个文件。本轮新增：
+`settings/EqualizerScreen.kt`（均衡器全屏浮层）、`settings/OpenListConfigScreen.kt` +
+`OpenListViewModel.kt`（服务器配置与同步）、`settings/BatteryOptimization.kt`（保活引导）、
+`player/QueueReorder.kt`（拖拽目标位置纯函数）。主要文件：
 
 ```
 PrimuseApp.kt          三 Tab 外壳 + 迷你播放条 + 播放页浮层 + 队列
@@ -281,7 +290,7 @@ adb logcat -s PrimuseLite:V AndroidRuntime:E
 |---|---|---|---|
 | D1 | Kotlin + Compose，不用 Flutter | 音频生态只有原生，参考项目也全是原生 | docs/02 |
 | D2 | Media3，不引入 FFmpeg | 常见格式原生够用，省 2 个月 | docs/02 |
-| D3 | OpenList 走 Subsonic API | OpenList 源码有 `server/handles/subsonic.go`，语义面向音乐 | docs/03 |
+| D3 | **混合**：原生 REST 管同步与流播，Subsonic（`apiKey`）管元数据与封面 | 首测 Subsonic 未启用 → 全走原生 REST；用户启用后复测：Subsonic 只认 `apiKey`、`stream` 302 到 http 明文不可用、`path` 与 `/api/fs/get` 不通用，但艺术家/专辑/封面是原生 REST 给不了的 | docs/03 §6 §7 |
 | D4 | 保留 WebDAV 兜底 | Subsonic 实现可能不全，WebDAV 一定能列目录 | docs/03 |
 | D5 | 远程不落盘，边播边缓存 | `SimpleCache` 省流量，二次播放秒开 | docs/02 |
 | D6 | 不做登录体系 | 自用，密码存 EncryptedSharedPreferences | docs/02 |
@@ -293,6 +302,9 @@ adb logcat -s PrimuseLite:V AndroidRuntime:E
 | D13 | UI 走「双空间」：浏览浅色密集，播放恒定深色 + 封面主色渐晕 | 大封面在深底上对比最强，OLED 省电，切歌换氛围色成本极低 | docs/07 §3.1 |
 | D14 | 播放页用自定义全屏浮层，不用 `ModalBottomSheet` | 避免与左右滑切歌抢手势，且不污染返回栈 | docs/07 §2 Q3 |
 | — | **UI 已落地在 app 模块**，不拆到 feature | 那几个模块没有 Compose/Hilt 依赖，单独配置风险高；自用 App 优先跑通 | `app/ui/` |
+| D15 | 远程曲库只存 `openlist:/路径`，**不存 raw_url** | raw_url 带有时效 tempauth；起播/seek 时由 `ResolvingDataSource` 现取新鲜直链 | docs/03 §6 |
+| D16 | Media3 1.11 用 `AudioTrackAudioOutputProvider` 上报「不支持 offload」 | 旧 `setEnableAudioOffload` 已删除；不关 offload 时 Equalizer 会静默失效 | PlayerFactory |
+| D17 | 服务器密码用普通 SharedPreferences，不用 EncryptedSharedPreferences | `security-crypto` 停在 alpha，AGP 9 / targetSdk 37 下兼容风险大；自用不上架，应用私有目录已满足威胁模型 | ServerConfigStore |
 
 ## 11. 禁止事项
 
@@ -313,7 +325,7 @@ adb logcat -s PrimuseLite:V AndroidRuntime:E
 | Hilt + KSP 与 AGP 9 兼容性 | ✅ **本轮已跑通**（`kspDebugKotlin` / `hiltCollectClassesDebug` / `hiltJavaCompileDebug` 等执行成功） | 回退路径保留未动（`BUILD-NOTES.md` §4.1） |
 | AGP 9 内置 Kotlin | 🟡 存疑 | 出问题按 §4.2 关闭内置 Kotlin（AGP 10 起不可关） |
 | compileSdk 37 | ✅ **已确认** | 本机 SDK 含 `platforms/android-37.0` + `build-tools/37.0.0` |
-| OpenList Subsonic 接口完整度 | 🔴 未知 | 无公开文档，P3-01 必须实测 |
+| OpenList Subsonic 接口完整度 | ✅ **已实测（不可用）** | 2026-11-11 实测 v4.2.9 未启用，改走原生 REST 全通；见 `docs/03` §6 |
 | Primuse UI 还原度 | 🟡 已评估 | 骨架层 88–92%，播放层 78–85%，特效层 30–50%，详见 `docs/06` §9；落地方案见 `docs/07` |
 
 ## 13. 文档索引
@@ -321,11 +333,12 @@ adb logcat -s PrimuseLite:V AndroidRuntime:E
 | 文件 | 什么时候读 |
 |---|---|
 | `README.md` | 了解范围与背景（为什么重写、为什么这样选型） |
+| `USAGE.md` | **用户手册**：安装、权限、目录增删、OpenList 配置、播放/歌词/均衡器、构建与重新生成签名、已知限制 |
 | `BUILD-NOTES.md` | **动手构建前必读**：环境要求、版本表、四条降级方案 |
 | `TASKS.md` | **每次开工前**：38 个任务、验收标准、依赖关系 |
 | `docs/01-research.md` | 想换技术方案时，看 GitHub 实测数据与选型依据 |
 | `docs/02-architecture.md` | 写代码前：模块边界、数据流、公网安全、双通道扫描 |
-| `docs/03-openlist-api.md` | 做 OpenList 对接时：Subsonic 接口、URL 规范化、WebDAV 兜底 |
+| `docs/03-openlist-api.md` | **做远程改动前必读 §6**（2026-11-11 真实服务器实测：Subsonic 不可用、原生 REST 全通、raw_url 约束）；§1–5 是早期设计存档 |
 | `docs/04-reference-index.md` | 不知道某功能怎么实现时：该抄哪个仓库的哪个文件 |
 | `docs/05-progress.md` | 想知道之前做过什么、踩过什么坑、下一步提醒 |
 | `docs/06-ui-spec.md` | UI 草案与还原度评估。**已被 `docs/07` 取代**，仅作讨论存档 |

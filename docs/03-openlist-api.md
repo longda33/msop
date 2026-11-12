@@ -204,7 +204,158 @@ Content-Type: application/xml
 
 | # | 决策 | 依据 |
 |---|---|---|
-| D3 | 主通道用 Subsonic API | OpenList 源码存在 `subsonic.go`，音乐语义天然匹配，省掉自解析 ID3 |
-| D4 | 保留 WebDAV 兜底 | Subsonic 实现完整度未知，WebDAV 一定能列目录 |
+| D3 | ~~主通道用 Subsonic API~~ **2026-11-11 修订为 OpenList 原生 REST** | 见 §6 实测：用户服务器未启用 Subsonic 且账号非管理员，无法开启 |
+| D4 | 保留 WebDAV 兜底（本轮未实现） | WebDAV 实测可用，作为将来原生 API 变更时的备选 |
 | D7 | 按公网 HTTPS 设计，base URL 支持 path prefix | 用户实际部署在公网反代后，非根路径 |
 | D11 | 不缓存远程元数据到本地全量 | 只在首次浏览时拉取并入库，避免大库同步耗时 |
+
+---
+
+## 6. 2026-11-11 真实服务器实测（P3-01 验收）
+
+用户提供了公网 OpenList 部署与账号（**凭据只用于本机实测，未写入任何仓库文件**）。
+服务器 `OpenList v4.2.9 (Commit 0497ee8)`，根目录 23 个 FLAC 文件、无子目录、无封面。
+
+本机默认代理对 `*.koyeb.app` 返回 `CONNECT tunnel failed, 502`，直连超时；
+**唯一可用的探测通道是本地代理 `http://127.0.0.1:10808`**，所有 curl 都带
+`--proxy http://127.0.0.1:10808`。真机验证时给模拟器设了
+`settings put global http_proxy 10.0.2.2:10808`（`10.0.2.2` 是模拟器访问主机的地址）。
+
+### 6.1 三条通道结论
+
+| 通道 | 实测结果 | 结论 |
+|---|---|---|
+| **Subsonic** | `/rest/*`、`/api/subsonic/rest/*`、`/subsonic/rest/*` 全部返回 8506 字节 SPA HTML；v4.2.9 `server/router.go` 显示真实路由是 `/@rest/*`，实测该路径 **404** | **不可用**。`server/handles/subsonic.go` 在 `MediaSubsonicEnabled()==false` 时直接 404；`/api/public/settings` 里 `media_enabled=false`，`/api/me` 显示账号 `role=0`（非 admin），`/api/admin/setting/list` 返回 403，无法自行开启 |
+| **WebDAV** | `PROPFIND /dav/` + Basic → **207 Multi-Status**，XML 含 `displayname / getcontentlength / getcontenttype`；`GET /dav/<file>` → 302 跳 SharePoint 直链 | **可用但没选**。要解析 XML、跟 302；改 JWT Bearer 会 401 |
+| **OpenList 原生 REST** | 登录 / 列目录 / 取直链 / Range 全部实测通过 | **选为主通道**（P3-02 落地） |
+
+### 6.2 原生 REST 真实响应（截断）
+
+```bash
+# 登录：请求头是 Authorization: <jwt>，没有 Bearer 前缀
+curl --proxy http://127.0.0.1:10808 -X POST "$BASE/api/auth/login" \
+  -H 'Content-Type: application/json' -d '{"username":"<user>","password":"<pwd>"}'
+# → {"code":200,"message":"success","data":{"token":"eyJhbGciOiJIUzI1NiIs..."}}
+
+# 列目录
+curl --proxy ... -X POST "$BASE/api/fs/list" -H "Authorization: $JWT" \
+  -H 'Content-Type: application/json' \
+  -d '{"path":"/","page":1,"per_page":100,"refresh":false}'
+# → {"code":200,"data":{"content":[{"name":"Butter-Fly - 和田光司.flac",
+#     "size":34929358,"is_dir":false,"modified":"2026-11-02T08:36:47Z",
+#     "sign":"","thumb":"","type":3}],"total":23,"provider":"unknown"}}
+
+# 取直链
+curl --proxy ... -X POST "$BASE/api/fs/get" -H "Authorization: $JWT" \
+  -d '{"path":"/Butter-Fly - 和田光司.flac"}'
+# → {"code":200,"data":{"name":"...","size":34929358,"sign":"",
+#     "raw_url":"https://<sharepoint>/.../download.aspx?...&tempauth=v1.eyJ...",
+#     "provider":"Onedrive Sharelink"}}
+
+# 直链 GET 支持 Range（关键）
+curl --proxy ... -H 'Range: bytes=0-1023' -o /dev/null -w '%{http_code} %{size_download}' "$RAW_URL"
+# → 206 1024     注意：这个请求**不能**带 Authorization，实测加了会 401
+```
+
+其它实测：`POST /api/fs/other` → 业务码 500 `not implement`；`GET /d/<file>` → 500（需要 sign，而 list 的 `sign` 为空）；`thumb` 全空、同目录无图片，**服务端不产出音频封面**。
+
+### 6.3 由此定下的实现约束（写进代码了）
+
+1. **绝不把 `raw_url` 存进数据库**——它带有时效 `tempauth`，过期后整个曲库都播不了。
+   库里存稳定内部 URI `openlist:/路径`，每次起播（含 seek 重新打开 DataSpec）由
+   `ResolvingDataSource` 调一次 `/api/fs/get` 换新鲜直链。
+2. **直链 GET 不带任何 Authorization 头**，完全交给 Media3 的 DefaultHttpDataSource。
+3. **Track.id 用路径 SHA-1**（`openlist:` 前缀），不是 URL、不是文件名。
+4. **业务码与 HTTP 码都要判**：HTTP 200 也可能返回 `code=401 Guest user is disabled`；
+   401/403 时清 token 重登一次。
+5. `durationMs` 入库时是 0（服务端不给时长），播放页由 Media3 解析，列表里显示 `--:--`。
+6. 无远程封面，`coverUri` 留 null，列表与播放页用默认占位，不造假数据。
+
+### 6.4 真机验收（emulator-5554 / Android 12）
+
+| 项 | 结果 |
+|---|---|
+| 配置页读入地址/账号/密码 | ✅ 显示「已配置」 |
+| 保存并同步 | ✅ `扫描 23 项 · 写入 23 首 · 清理 0 条 · 454 ms`，DB `OPENLIST|23` |
+| 远程歌与本地歌混排 | ✅ 搜索「Butter-Fly」命中 1 首，副标题 OpenList |
+| 远程 FLAC 播放 | ✅ `state=3`，`CCodecConfig: audio/flac`，position 持续推进，无 ExoPlaybackException |
+| 拖动进度条 seek | ✅ position `68129 → 208546` ms，仍 `state=3`，无 DataSource 异常（Range 与直链刷新都生效） |
+
+---
+
+## 7. 2026-11-11 晚 · Subsonic 启用后的复测（元数据增强）
+
+用户随后在 OpenList 后台启用了媒体库并提供了**媒体应用密钥**（`olmp_` 前缀，凭据不入库）。
+本节的结论直接决定了最终架构：**Subsonic 只补元数据与封面，流播仍走原生 REST**。
+
+### 7.1 鉴权：只认 `apiKey`
+
+`/api/public/settings` 的 `media_enabled` 从 `false` 变成 `true`，`/@rest/ping.view` 不再 404。
+但鉴权方式和标准 Subsonic 不同（源码 `server/handles/subsonic.go` 的 `subAuthInner` 印证）：
+
+| 方式 | 实测结果 |
+|---|---|
+| `apiKey=<应用密钥>` | ✅ `{"status":"ok",...}` |
+| `u=app&t=md5(密钥+salt)&s=salt` | ❌ `code=40 Wrong username or password; use an app key as the password or enable password auth` |
+| `u=app&p=<密钥>` | ❌ 同上（`p` 分支要求 `u` 对应的用户与该密钥属于同一账号，或管理员开启密码认证） |
+| `u=&p=<密钥>` | ✅ 也通（源码：用户名为空时按应用密钥查用户） |
+
+**客户端用 `apiKey` 参数**，不需要用户名、密码或 salt。
+
+### 7.2 接口实测（`/@rest/*.view`）
+
+| 接口 | 结果 | 关键字段 |
+|---|---|---|
+| `ping` | ✅ | `status=ok`，`type=OpenList`，`openSubsonic=true` |
+| `getMusicFolders` | ✅ | `[{"id":"1","name":"Music"}]` |
+| `getArtists` | ✅ | `index[].artist[]` 含 `id/name/albumCount/coverArt/album[]` |
+| `getAlbumList2` | ✅ | 22 张专辑、23 首歌；`duration` 恒为 0 |
+| `getAlbum` / `getSong` | ✅ | song 含 `title/album/artist/coverArt/size/contentType/suffix/path/albumId/artistId`；**没有 duration 字段** |
+| `search3` | ✅ | **空 `query` + `songCount=500` 一次返回全部 23 首**（用它代替 22 次 `getAlbum`） |
+| `getCoverArt` | ✅ | `HTTP 200 image/jpeg 129708 B`，真实专辑封面 |
+| `getLyricsBySongId` | ⚠️ | `code=70 lyrics not found`（OpenSubsonic 扩展，服务器没歌词） |
+| `stream` | ⚠️ | `302` 跳 `http://.../d/...?sign=...`，**明文** |
+
+`stream` 不可用的原因很具体：跳转目标是 `http://`，而 App 的
+`network_security_config.xml` 全局禁明文，Media3 跟随后会被系统拒绝；把 scheme
+改成 `https://` 也不稳定（签名 URL 带未编码空格，且签名有时效）。所以**流播继续用
+原生 REST 的 `/api/fs/get` 拿 HTTPS raw_url**。
+
+另一个坑：Subsonic 的 `path` 是服务器绝对路径
+（`/od-20200439/musicweb/xxx.flac`），直接喂给 `/api/fs/get` 返回
+`{"code":500,"message":"object not found"}`；原生 REST 要的是相对用户根目录的
+`/xxx.flac`。两边路径**不通用**，因此元数据匹配用**文件名**而不是路径。
+
+### 7.3 最终架构
+
+```
+Subsonic（apiKey）  ──→  艺术家 / 专辑 / 专辑ID / contentType / 真实封面
+                              ↓ 按文件名匹配
+原生 REST（JWT）    ──→  目录扫描（稳定路径、幽灵清理）+ /api/fs/get 流播（HTTPS + Range）
+```
+
+- 未填应用密钥：行为和 §6 完全一致（无封面，专辑取目录名）。
+- 填了应用密钥：同步后额外一次 `search3`，把 23 首的元数据补齐；失败只降级不阻断。
+- 数据库里 `coverUri` 存的是**带 apiKey 的 getCoverArt URL**，交给 Coil 加载。
+
+### 7.4 真机验收（emulator-5554 / Android 12）
+
+| 项 | 结果 |
+|---|---|
+| 配置页新增「Subsonic 应用密钥（可选）」 | ✅ 45 位密钥完整输入，状态卡片显示「Subsonic 元数据已启用」 |
+| 同步 | ✅ `扫描 23 项 · 写入 23 首 · 补全 23 首 · 清理 0 条 · 8476 ms` |
+| 数据库 | ✅ `23 首 / 23 有封面 / 23 有艺术家 / 23 有 albumId` |
+| 元数据正确性 | ✅ `Rage Your Dream · m.o.v.e · 頭文字D Final Best Collection`（原生 REST 只能给「OpenList」） |
+| 封面渲染 | ✅ 真实 JPEG（129 KB），Coil 磁盘缓存写入 180 KB 文件 |
+| 播放 | ✅ `state=3`，metadata `Butter-Fly, 和田光司, Butter-Fly`，无 `ExoPlaybackException` |
+
+**封面渲染踩了两个坑（都表现为「静默不显示」）**：
+
+1. Coil 3 的网络加载器是独立模块 `coil-network-okhttp`。只依赖 `coil-compose` 时，
+   本地 `file://` 封面照常显示、远程 `https://` 封面静默失败，很容易误判成服务端问题。
+   已在 `app/build.gradle.kts` 补上该依赖。
+2. 补完依赖后 debug 正常，但 **release 包封面又变回占位图**：R8 把 Coil 通过
+   `META-INF/services/coil3.util.FetcherServiceLoaderTarget` 注册的实现类删掉了，
+   `shrinkResources` 连注册文件一起删。已改为在 `PrimuseApplication` 显式实现
+   `SingletonImageLoader.Factory` 并 `add(OkHttpNetworkFetcherFactory())`（R8 能看到
+   静态引用），`proguard-rules.pro` 里再 keep 一层兜底。
