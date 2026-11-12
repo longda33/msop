@@ -61,7 +61,9 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.Color
@@ -920,21 +922,25 @@ private fun LyricLines(
         }
     }
 
-    // 上下边缘渐隐：把歌词「融」进背景，远处歌词透视淡出（BetterLyrics 的 spatial fade）
+    // 上下边缘渐隐：用 DstIn 真正的 alpha 蒙版让歌词淡出（而不是画一层黑色，
+    // 那样会在顶部糊出一块和背景不匹配的黑条）
     BoxWithConstraints(
-        modifier.drawWithContent {
-            drawContent()
-            drawRect(
-                brush = Brush.verticalGradient(
-                    colorStops = arrayOf(
-                        0.0f to Palette.Ink,
-                        0.14f to Color.Transparent,
-                        0.84f to Color.Transparent,
-                        1.0f to Palette.Ink,
+        modifier
+            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+            .drawWithContent {
+                drawContent()
+                drawRect(
+                    brush = Brush.verticalGradient(
+                        colorStops = arrayOf(
+                            0.0f to Color.Transparent,
+                            0.12f to Color.Black,
+                            0.88f to Color.Black,
+                            1.0f to Color.Transparent,
+                        ),
                     ),
-                ),
-            )
-        },
+                    blendMode = BlendMode.DstIn,
+                )
+            },
     ) {
         val edgePadding = if (lyrics.synced) maxHeight / 2 else 12.dp
         LazyColumn(
