@@ -1,11 +1,13 @@
 package com.msop.player.ui.player
 
+import android.content.res.Configuration
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -16,6 +18,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -96,6 +99,8 @@ fun PlayerSheet(
     BackHandler(onBack = onCollapse)
 
     var showLyrics by remember { mutableStateOf(false) }
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     val duration = if (state.durationMs > 0) state.durationMs else (track?.durationMs ?: 0L)
     var dragValue by remember { mutableFloatStateOf(-1f) }
@@ -106,9 +111,7 @@ fun PlayerSheet(
     // 上滑不移动面板（上面已经是屏幕边缘），累计位移超过阈值就打开队列。
     var offsetY by remember { mutableFloatStateOf(0f) }
     val scope = rememberCoroutineScope()
-    val screenHeightPx = with(LocalDensity.current) {
-        LocalConfiguration.current.screenHeightDp.dp.toPx()
-    }
+    val screenHeightPx = with(LocalDensity.current) { configuration.screenHeightDp.dp.toPx() }
 
     // 手势只挂在「封面区 / 顶部栏 / 歌词头部」这些非滚动区域。
     // 挂在根布局会和歌词 LazyColumn 的滚动抢事件——实测会把页面误收起。
@@ -227,177 +230,355 @@ fun PlayerSheet(
                 Spacer(Modifier.size(44.dp))
             }
 
-            if (showLyrics) {
-                LyricsPane(
-                    track = track,
-                    positionMs = positionMs,
-                    onSeek = onSeek,
-                    vm = lyricsViewModel,
-                    dragModifier = dragModifier,
-                    modifier = Modifier.weight(1f),
-                )
-            } else {
-                Box(
-                    modifier = Modifier.weight(1f).then(dragModifier),
-                    contentAlignment = Alignment.Center,
+            if (isLandscape) {
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Column {
-                        Box(
-                            modifier = Modifier
-                                .padding(horizontal = 42.dp)
-                                .fillMaxWidth()
-                                .aspectRatio(1f)
-                                .clip(Shapes.coverStage)
-                                .background(Palette.Surface3)
-                                .clickable { showLyrics = true },
-                        ) {
-                            CoverThumb(
-                                coverUri = track?.coverUri,
-                                size = null,
-                                shape = Shapes.coverStage,
-                                modifier = Modifier.fillMaxSize(),
-                                iconSize = 56.dp,
-                            )
+                    LandscapePlayerPane(
+                        state = state,
+                        track = track,
+                        duration = duration,
+                        fraction = fraction,
+                        onFractionChange = { dragValue = it },
+                        onFinishSeek = {
+                            if (dragValue >= 0f) onSeek((dragValue * duration).toLong())
+                            dragValue = -1f
+                        },
+                        onToggle = onToggle,
+                        onNext = onNext,
+                        onPrevious = onPrevious,
+                        onCycleMode = onCycleMode,
+                        onOpenQueue = onOpenQueue,
+                        modifier = Modifier.weight(0.94f).fillMaxHeight(),
+                    )
+                    LyricsPane(
+                        track = track,
+                        positionMs = positionMs,
+                        onSeek = onSeek,
+                        vm = lyricsViewModel,
+                        dragModifier = dragModifier,
+                        showHeader = false,
+                        modifier = Modifier.weight(1.06f).fillMaxHeight(),
+                    )
+                }
+            } else {
+                if (showLyrics) {
+                    LyricsPane(
+                        track = track,
+                        positionMs = positionMs,
+                        onSeek = onSeek,
+                        vm = lyricsViewModel,
+                        dragModifier = dragModifier,
+                        modifier = Modifier.weight(1f),
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier.weight(1f).then(dragModifier),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column {
                             Box(
                                 modifier = Modifier
-                                    .align(Alignment.BottomStart)
-                                    .padding(10.dp)
-                                    .clip(Shapes.pill)
-                                    .background(Color(0x80000000))
-                                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                                    .padding(horizontal = 42.dp)
+                                    .fillMaxWidth()
+                                    .aspectRatio(1f)
+                                    .clip(Shapes.coverStage)
+                                    .background(Palette.Surface3)
+                                    .clickable { showLyrics = true },
                             ) {
+                                CoverThumb(
+                                    coverUri = track?.coverUri,
+                                    size = null,
+                                    shape = Shapes.coverStage,
+                                    modifier = Modifier.fillMaxSize(),
+                                    iconSize = 56.dp,
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomStart)
+                                        .padding(10.dp)
+                                        .clip(Shapes.pill)
+                                        .background(Color(0x80000000))
+                                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                                ) {
+                                    Text(
+                                        text = if (track?.source?.name == "OPENLIST") "云端" else "本地文件",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Palette.TextSecondary,
+                                    )
+                                }
+                            }
+
+                            Column(Modifier.padding(start = 30.dp, end = 30.dp, top = 24.dp)) {
                                 Text(
-                                    text = if (track?.source?.name == "OPENLIST") "云端" else "本地文件",
-                                    style = MaterialTheme.typography.labelSmall,
+                                    text = track?.title ?: "未在播放",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    color = Palette.TextPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    text = listOfNotNull(track?.artist, track?.album)
+                                        .joinToString(" · ")
+                                        .ifBlank { "—" },
+                                    style = MaterialTheme.typography.bodyMedium,
                                     color = Palette.TextSecondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(top = 5.dp),
                                 )
                             }
                         }
-
-                        Column(Modifier.padding(start = 30.dp, end = 30.dp, top = 24.dp)) {
-                            Text(
-                                text = track?.title ?: "未在播放",
-                                style = MaterialTheme.typography.headlineSmall,
-                                color = Palette.TextPrimary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                text = listOfNotNull(track?.artist, track?.album)
-                                    .joinToString(" · ")
-                                    .ifBlank { "—" },
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Palette.TextSecondary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(top = 5.dp),
-                            )
-                        }
                     }
                 }
-            }
 
-            Column(Modifier.padding(horizontal = 30.dp)) {
-                Slider(
-                    value = fraction,
-                    onValueChange = { dragValue = it },
-                    onValueChangeFinished = {
+                PlayerTransport(
+                    state = state,
+                    duration = duration,
+                    fraction = fraction,
+                    onFractionChange = { dragValue = it },
+                    onFinishSeek = {
                         if (dragValue >= 0f) onSeek((dragValue * duration).toLong())
                         dragValue = -1f
                     },
-                    enabled = duration > 0,
-                    colors = SliderDefaults.colors(
-                        thumbColor = Color.White,
-                        activeTrackColor = Palette.BlueLight,
-                        inactiveTrackColor = Color(0x1FFFFFFF),
-                    ),
-                    modifier = Modifier.fillMaxWidth().height(26.dp),
+                    onToggle = onToggle,
+                    onNext = onNext,
+                    onPrevious = onPrevious,
+                    onCycleMode = onCycleMode,
+                    onOpenQueue = onOpenQueue,
+                    showViewToggle = true,
+                    lyricsSelected = showLyrics,
+                    onShowLyrics = { showLyrics = true },
+                    onShowCover = { showLyrics = false },
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
+            }
+        }
+    }
+}
+
+@Composable
+private fun LandscapePlayerPane(
+    state: PlaybackState,
+    track: Track?,
+    duration: Long,
+    fraction: Float,
+    onFractionChange: (Float) -> Unit,
+    onFinishSeek: () -> Unit,
+    onToggle: () -> Unit,
+    onNext: () -> Unit,
+    onPrevious: () -> Unit,
+    onCycleMode: () -> Unit,
+    onOpenQueue: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.padding(horizontal = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Column(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            BoxWithConstraints(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                val coverSize = minOf(maxWidth - 20.dp, maxHeight)
+                    .coerceAtMost(250.dp)
+                    .coerceAtLeast(48.dp)
+                Box(
+                    modifier = Modifier
+                        .size(coverSize)
+                        .clip(Shapes.coverStage)
+                        .background(Palette.Surface3),
                 ) {
-                    Text(
-                        text = (fraction * duration).toLong().toDurationLabel(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Palette.TextTertiary,
-                    )
-                    Text(
-                        text = duration.toDurationLabel(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Palette.TextTertiary,
+                    CoverThumb(
+                        coverUri = track?.coverUri,
+                        size = null,
+                        shape = Shapes.coverStage,
+                        modifier = Modifier.fillMaxSize(),
+                        iconSize = 48.dp,
                     )
                 }
             }
+            Text(
+                text = track?.title ?: "未在播放",
+                style = MaterialTheme.typography.titleMedium,
+                color = Palette.TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = listOfNotNull(track?.artist, track?.album)
+                    .joinToString(" · ")
+                    .ifBlank { "—" },
+                style = MaterialTheme.typography.labelSmall,
+                color = Palette.TextSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+        PlayerTransport(
+            state = state,
+            duration = duration,
+            fraction = fraction,
+            onFractionChange = onFractionChange,
+            onFinishSeek = onFinishSeek,
+            onToggle = onToggle,
+            onNext = onNext,
+            onPrevious = onPrevious,
+            onCycleMode = onCycleMode,
+            onOpenQueue = onOpenQueue,
+            showViewToggle = false,
+            lyricsSelected = true,
+            onShowLyrics = {},
+            onShowCover = {},
+            compact = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
 
+@Composable
+private fun PlayerTransport(
+    state: PlaybackState,
+    duration: Long,
+    fraction: Float,
+    onFractionChange: (Float) -> Unit,
+    onFinishSeek: () -> Unit,
+    onToggle: () -> Unit,
+    onNext: () -> Unit,
+    onPrevious: () -> Unit,
+    onCycleMode: () -> Unit,
+    onOpenQueue: () -> Unit,
+    showViewToggle: Boolean,
+    lyricsSelected: Boolean,
+    onShowLyrics: () -> Unit,
+    onShowCover: () -> Unit,
+    compact: Boolean = false,
+    modifier: Modifier = Modifier,
+) {
+    val progressPadding = if (compact) 10.dp else 30.dp
+    val controlPadding = if (compact) 4.dp else 30.dp
+    val buttonSize = if (compact) 36.dp else 44.dp
+    val skipSize = if (compact) 38.dp else 48.dp
+    val playSize = if (compact) 50.dp else 66.dp
+
+    Column(modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = progressPadding)) {
+            Slider(
+                value = fraction,
+                onValueChange = onFractionChange,
+                onValueChangeFinished = onFinishSeek,
+                enabled = duration > 0,
+                colors = SliderDefaults.colors(
+                    thumbColor = Color.White,
+                    activeTrackColor = Palette.BlueLight,
+                    inactiveTrackColor = Color(0x1FFFFFFF),
+                ),
+                modifier = Modifier.fillMaxWidth().height(if (compact) 22.dp else 26.dp),
+            )
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 30.dp, end = 30.dp, top = 18.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                CircleIcon(
-                    icon = PlayerIcons.Shuffle,
-                    contentDescription = "随机",
-                    onClick = onCycleMode,
-                    tint = if (state.playMode == PlayMode.SHUFFLE) Palette.BlueLight else Palette.TextTertiary,
+                Text(
+                    text = (fraction * duration).toLong().toDurationLabel(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Palette.TextTertiary,
                 )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(20.dp),
-                ) {
-                    CircleIcon(PlayerIcons.SkipPrevious, "上一首", onPrevious, size = 48.dp, iconSize = 26.dp)
-                    Box(
-                        modifier = Modifier
-                            .size(66.dp)
-                            .clip(CircleShape)
-                            .background(Palette.Blue)
-                            .clickable(onClick = onToggle),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = if (state.isPlaying) PlayerIcons.Pause else Icons.Filled.PlayArrow,
-                            contentDescription = if (state.isPlaying) "暂停" else "播放",
-                            tint = Color.White,
-                            modifier = Modifier.size(30.dp),
-                        )
-                    }
-                    CircleIcon(PlayerIcons.SkipNext, "下一首", onNext, size = 48.dp, iconSize = 26.dp)
-                }
-                CircleIcon(
-                    icon = PlayerIcons.Repeat,
-                    contentDescription = "循环",
-                    onClick = onCycleMode,
-                    tint = if (state.playMode == PlayMode.REPEAT_ONE) Palette.BlueLight else Palette.TextTertiary,
+                Text(
+                    text = duration.toDurationLabel(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Palette.TextTertiary,
                 )
             }
+        }
 
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(
+                start = controlPadding,
+                end = controlPadding,
+                top = if (compact) 6.dp else 18.dp,
+            ),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            CircleIcon(
+                icon = PlayerIcons.Shuffle,
+                contentDescription = "随机",
+                onClick = onCycleMode,
+                tint = if (state.playMode == PlayMode.SHUFFLE) Palette.BlueLight else Palette.TextTertiary,
+                size = buttonSize,
+                iconSize = if (compact) 18.dp else 22.dp,
+            )
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 24.dp),
-                horizontalArrangement = Arrangement.SpaceAround,
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(if (compact) 8.dp else 20.dp),
             ) {
+                CircleIcon(PlayerIcons.SkipPrevious, "上一首", onPrevious, size = skipSize, iconSize = 22.dp)
+                Box(
+                    modifier = Modifier
+                        .size(playSize)
+                        .clip(CircleShape)
+                        .background(Palette.Blue)
+                        .clickable(onClick = onToggle),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = if (state.isPlaying) PlayerIcons.Pause else Icons.Filled.PlayArrow,
+                        contentDescription = if (state.isPlaying) "暂停" else "播放",
+                        tint = Color.White,
+                        modifier = Modifier.size(if (compact) 24.dp else 30.dp),
+                    )
+                }
+                CircleIcon(PlayerIcons.SkipNext, "下一首", onNext, size = skipSize, iconSize = 22.dp)
+            }
+            CircleIcon(
+                icon = PlayerIcons.Repeat,
+                contentDescription = "循环",
+                onClick = onCycleMode,
+                tint = if (state.playMode == PlayMode.REPEAT_ONE) Palette.BlueLight else Palette.TextTertiary,
+                size = buttonSize,
+                iconSize = if (compact) 18.dp else 22.dp,
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(
+                start = if (compact) 0.dp else 18.dp,
+                end = if (compact) 0.dp else 18.dp,
+                top = if (compact) 2.dp else 20.dp,
+                bottom = if (compact) 4.dp else 24.dp,
+            ),
+            horizontalArrangement = if (showViewToggle) Arrangement.SpaceAround else Arrangement.Center,
+        ) {
+            if (showViewToggle) {
                 FootEntry(
                     icon = PlayerIcons.Lyrics,
                     label = "歌词",
-                    active = showLyrics,
-                    onClick = { showLyrics = !showLyrics },
+                    active = lyricsSelected,
+                    onClick = onShowLyrics,
                 )
                 FootEntry(
                     icon = PlayerIcons.Disc,
                     label = "封面",
-                    active = !showLyrics,
-                    onClick = { showLyrics = false },
-                )
-                FootEntry(
-                    icon = PlayerIcons.Queue,
-                    label = "队列",
-                    active = false,
-                    onClick = onOpenQueue,
+                    active = !lyricsSelected,
+                    onClick = onShowCover,
                 )
             }
+            FootEntry(
+                icon = PlayerIcons.Queue,
+                label = "队列",
+                active = false,
+                onClick = onOpenQueue,
+            )
         }
     }
 }
@@ -471,35 +652,38 @@ private fun LyricsPane(
     onSeek: (Long) -> Unit,
     vm: LyricsViewModel,
     dragModifier: Modifier,
+    showHeader: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     LaunchedEffect(track?.id) { vm.load(track) }
     val lyrics by vm.lyrics.collectAsStateWithLifecycle()
     val loading by vm.loading.collectAsStateWithLifecycle()
 
-    Column(modifier.fillMaxWidth().padding(horizontal = 26.dp)) {
-        Row(
-            modifier = Modifier.padding(bottom = 8.dp).then(dragModifier),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            CoverThumb(track?.coverUri, 42.dp, Shapes.coverSmall)
-            Spacer(Modifier.width(11.dp))
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = track?.title ?: "未在播放",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = Palette.TextPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = track?.artist ?: "—",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Palette.TextTertiary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 1.dp),
-                )
+    Column(modifier.fillMaxSize().padding(horizontal = 26.dp)) {
+        if (showHeader) {
+            Row(
+                modifier = Modifier.padding(bottom = 8.dp).then(dragModifier),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CoverThumb(track?.coverUri, 42.dp, Shapes.coverSmall)
+                Spacer(Modifier.width(11.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = track?.title ?: "未在播放",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = Palette.TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = track?.artist ?: "—",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Palette.TextTertiary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 1.dp),
+                    )
+                }
             }
         }
 
@@ -534,7 +718,7 @@ private fun LyricsPane(
             else -> {
                 val loaded = requireNotNull(lyrics)
                 Column(Modifier.fillMaxSize()) {
-                    if (!loaded.synced) {
+                    if (!loaded.synced && showHeader) {
                         Text(
                             text = "歌词未同步 · 仅展示全文",
                             style = MaterialTheme.typography.labelSmall,
@@ -576,39 +760,46 @@ private fun LyricLines(
     }
 
     LaunchedEffect(currentIndex, autoFollow) {
-        if (autoFollow && currentIndex >= 0) {
-            // -180px：把当前行压在偏上的位置，给下一句留出视线
-            listState.animateScrollToItem(currentIndex, -180)
+        if (lyrics.synced && autoFollow && currentIndex >= 0) {
+            listState.animateScrollToItem(currentIndex)
+            val layout = listState.layoutInfo
+            val item = layout.visibleItemsInfo.firstOrNull { it.index == currentIndex }
+            if (item != null) {
+                val viewportCenter = (layout.viewportStartOffset + layout.viewportEndOffset) / 2
+                val itemCenter = item.offset + item.size / 2
+                listState.animateScrollBy((itemCenter - viewportCenter).toFloat())
+            }
         }
     }
 
-    LazyColumn(
-        state = listState,
-        modifier = modifier,
-        contentPadding = PaddingValues(
-            top = if (lyrics.synced) 140.dp else 12.dp,
-            bottom = 140.dp,
-        ),
-    ) {
-        itemsIndexed(lyrics.lines) { index, line ->
-            val active = index == currentIndex
-            Text(
-                text = line.text,
-                style = MaterialTheme.typography.titleMedium,
-                color = if (active) Palette.BlueLight else Palette.TextTertiary,
-                fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(
-                        if (lyrics.synced) {
-                            Modifier.clickable { onSeek(line.timeMs) }
-                        } else {
-                            Modifier
-                        },
-                    )
-                    .padding(vertical = 7.dp),
-            )
+    BoxWithConstraints(modifier) {
+        val edgePadding = if (lyrics.synced) maxHeight / 2 else 12.dp
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = if (lyrics.synced) Arrangement.Top else Arrangement.Center,
+            contentPadding = PaddingValues(vertical = edgePadding),
+        ) {
+            itemsIndexed(lyrics.lines) { index, line ->
+                val active = index == currentIndex
+                Text(
+                    text = line.text,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (active) Palette.BlueLight else Palette.TextTertiary,
+                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(
+                            if (lyrics.synced) {
+                                Modifier.clickable { onSeek(line.timeMs) }
+                            } else {
+                                Modifier
+                            },
+                        )
+                        .padding(vertical = 7.dp),
+                )
+            }
         }
     }
 }

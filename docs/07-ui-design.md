@@ -253,6 +253,8 @@ Material Symbols Rounded，24dp（列表内 20dp），线宽 400（Rounded 默�
 
 同一浮层内的第二种形态，点「歌词」或点封面切换（封面缩小到 56dp 移入顶栏，`animateContentSize` 300ms）。
 歌词区：`LazyColumn`，当前行 20/600 白色，非当前 15/400 @40%，行间距 28。
+- 竖屏时当前歌词行在歌词区水平、垂直居中，前后歌词围绕当前行展开。
+- 横屏播放页采用左右分栏：左侧封面、曲目信息与播放控制；右侧只显示歌词行，不重复封面、曲名、歌手、格式或进度信息。
 - 点击任意行 → seek 到该行时间。
 - 手动滑动后 5s 无操作自动回中（`animateScrollToItem`）。
 - 无歌词 → 居中显示「暂无歌词」+「从文件重新读取」文字按钮。
@@ -366,6 +368,7 @@ Material Symbols Rounded，24dp（列表内 20dp），线宽 400（Rounded 默�
 横屏额外规则：
 - 列表行高不变，但一屏可见 8–10 行，边距增至 24。
 - 播放页封面限制 `maxHeight = 屏高 × 0.62`，避免横屏封面撑爆。
+- 播放页采用左封面右歌词；歌词栏不显示重复的曲目信息或播放状态。
 - 队列面板在横屏变为右侧抽屉（宽 360dp），不是底部上滑。
 
 ---
@@ -422,7 +425,7 @@ object StageColors {          // 播放区固定值，不进 colorScheme
 | `TrackRow` | `feature/library/ui/TrackRow.kt` | `Row` + `AsyncImage`(44dp) + 两行 `Text` + `Text(tnum)`；`combinedClickable(onClick, onLongClick)` |
 | `AlbumCard` | `feature/library/ui/AlbumCard.kt` | `Column` + `aspectRatio(1f)` |
 | `MiniPlayer` | `feature/player/ui/MiniPlayer.kt` | `Surface(shape = pill, tonalElevation = 3.dp)` + 底部 2dp `LinearProgressIndicator` |
-| `PlayerSheet` | `feature/player/ui/PlayerSheet.kt` | `AnimatedVisibility` + `AnchoredDraggable`；**不要用 `ModalBottomSheet`** |
+| `PlayerSheet` | `app/src/main/java/com/msop/player/ui/player/PlayerSheet.kt` | `AnimatedVisibility` + `AnchoredDraggable`；**不要用 `ModalBottomSheet`** |
 | `CoverStage` | `feature/player/ui/CoverStage.kt` | `Box` + `Brush.radialGradient(stageTint)` + `AsyncImage` + 1dp `border` |
 | `PlaybackControls` | `feature/player/ui/PlaybackControls.kt` | 5 键 `Row`，中间 `FilledIconButton` 64dp |
 | `QueueSheet` | `feature/player/ui/QueueSheet.kt` | `LazyColumn` + `detectDragGesturesAfterLongPress`（不引第三方 reorder 库） |

@@ -12,7 +12,7 @@
 1. **这是什么**：安卓音乐播放器，Kotlin + Compose + Media3，只读本机文件 + 对接公网 OpenList，自用不上架。
 2. **做到哪了**：**核心功能全部打通并真机验收**——12 模块骨架、本地扫描入库、播放内核、UI、歌单、歌词、均衡器、后台保活、**OpenList 远程音源（原生 REST 同步 + 流播 + seek，Subsonic 补艺术家/专辑/真实封面）**、release 自签名包、`USAGE.md`。本机具 Microsoft OpenJDK 21 + Android SDK，设备可用 `adb -s emulator-5554`（或 `127.0.0.1:5555`）。**该目录是 git 仓库**。
 3. **立刻该做什么**：没有阻塞项了。剩余都是可选项：P3-04 `SimpleCache` 缓存 / Wi-Fi 预加载、P3-05 WebDAV 兜底、P5-04 大库性能、P6-01 走查清单逐条勾。要做远程相关改动前**先读 `docs/03` §6 与 §7 的实测结论**（Subsonic 与原生 REST 各管一段，别把两者混着用）。
-4. **什么能碰**：`app/src/main/java/com/reference/lite/ui/` 是正式 UI，可以直接改。`feature/*/ui/` 仍然空着——UI 没有按模块拆，全部集中在 app 模块（原因见 §5 的说明）。
+4. **什么能碰**：`app/src/main/java/com/msop/player/ui/` 是正式 UI，可以直接改。`feature/*/ui/` 仍然空着——UI 没有按模块拆，全部集中在 app 模块（原因见 §5 的说明）。
 5. **可以并行做什么**：上面四项互不依赖。远程音源主通道是 **OpenList 原生 REST**（不是 Subsonic），别按旧文档写客户端。
 6. **最容易踩的坑**：AGP 9 内置 Kotlin，**不要**应用 `org.jetbrains.kotlin.android`；URL 拼接**不要**用字符串；Room 迁移**不要**开 destructive；`ffmpeg -metadata lyrics=` 写的是 `TXXX:USLT`；**KDoc 里出现 `/*` 会开启块注释**（写 `/@rest/*` 这种字面量会一路吞到文件末尾）；Media3 1.11 已删 `setEnableAudioOffload`。
 
@@ -34,11 +34,11 @@
 | 真机验证 | ✅ 历轮已验：三 Tab、扫描入库、通知、SAF、幽灵清理、标签/封面、MP3/WAV/FLAC 播放、后台/通知栏/媒体键、循环与随机、耳机拔出、来电打断续播、歌单持久化、播放页手势、歌词、封面清理。**本轮新增**：OpenList 配置/测试/同步（23 首 454ms）、远程 FLAC 播放与拖动 seek（68s→208s）、均衡器预设实时生效（设备 5 段）、目录管理弹窗、release 包全套回归；**Subsonic 启用后**：23 首全部补全艺术家/专辑/封面（8476ms）、真实 JPEG 封面（129KB，Coil 缓存 180KB）、播放 `state=3` 元数据正确 |
 | 构建状态 | ✅ `./gradlew tasks`、`test`、`:app:assembleDebug`（19.3 MB）、`:app:assembleRelease`（**3.0 MB**，R8 + V2 自签名）全部成功。release 首轮约 5m。SDK：android-37 / build-tools 37.0.0 |
 | 版本控制 | ✅ GitHub 公开仓库 <https://github.com/longda33/msop>（默认分支 `main`）。`app/release.jks` 与 `keystore.properties` 已加入 `.gitignore`，**不要提交** |
-| UI 状态 | ✅ **`app/ui/` 22 个界面文件**，本轮新增 `EqualizerScreen`、`OpenListConfigScreen`、`QueueReorder`。所有设置行都能点出真实功能 |
+| UI 状态 | ✅ 已落地；本轮按用户要求改为竖屏高亮歌词居中、横屏左封面右纯歌词。新增 mslogo 启动图标；本轮改动待构建/真机复验 |
 | 下一步 | 见 §8（4 个可选打磨项） |
 | 本机音乐位置 | 默认 MediaStore 标准目录，可追加 / **移除** SAF 自定义目录 |
 | OpenList 部署 | **已实测**：OpenList v4.2.9 公网 HTTPS。Subsonic 后已启用，鉴权只认 `apiKey`，负责元数据与封面；流播仍走原生 REST。详见 `docs/03` §6（原生 REST）与 §7（Subsonic） |
-| 最后更新 | 2026-11-12（项目改名为 **msop**，包名 `com.msop.player`；开源到 GitHub） |
+| 最后更新 | 2026-11-12（项目名与启动器名称均为 **msop**，包名 `com.msop.player`；启动图标使用用户提供的 `mslogo.png`） |
 
 **每次完成任务后必须更新三处**：本节、`TASKS.md` 对应勾选框、`docs/05-progress.md` 追加一条。
 
@@ -202,7 +202,7 @@ adb root && adb shell am broadcast -a android.media.AUDIO_BECOMING_NOISY && adb 
 ### 已知缺口 / 注意事项
 
 1. **权限拒绝路径未真机验证** —— 设备自动授权；release 包首次启动的门禁页与「授予」放行已验证，但「点拒绝」测不了。
-2. **横屏未专门适配** —— 竖屏布局，横屏可用但没走查。
+2. **横屏适配未完全走查** —— 播放页已改为左封面右歌词；曲库、设置等其他页面仍未专项验证。
 3. **标签被删除时同步不过来** —— 扫描给 null，`mergedWithExisting` 保留旧值。代价换来「重扫不丢补出来的数据」，见 `docs/05`。
 4. **M4A / OGG 的内嵌封面与标签未实测** —— MP3 `USLT` 与远程 FLAC 播放已验证。
 5. **远程曲目列表时长显示 `--:--`** —— 服务端列目录不给时长；播放后 Media3 能解析，播放页显示正确。
@@ -213,7 +213,7 @@ adb root && adb shell am broadcast -a android.media.AUDIO_BECOMING_NOISY && adb 
 
 ### UI 已落地并真机验收（2026-11-11）
 
-界面代码在 **`app/src/main/java/com/reference/lite/ui/`**，共 22 个文件。本轮新增：
+界面代码在 **`app/src/main/java/com/msop/player/ui/`**，共 22 个文件。本轮新增：
 `settings/EqualizerScreen.kt`（均衡器全屏浮层）、`settings/OpenListConfigScreen.kt` +
 `OpenListViewModel.kt`（服务器配置与同步）、`settings/BatteryOptimization.kt`（保活引导）、
 `player/QueueReorder.kt`（拖拽目标位置纯函数）。主要文件：
@@ -262,7 +262,7 @@ permission/AudioPermissionGate.kt 权限门禁
 1. 播放页封面无图时占位图标按 36% 缩放，在 300dp 封面上变成 100dp 的大圆环 → 改成固定 56dp。
 2. 播放页缺 `navigationBarsPadding()`，全面屏手势条会压住底部入口 → 已补。
 
-**还没做的**（不算 bug，属后续任务）：队列拖拽排序、远程歌词（待 P3）、横屏专门适配。
+**还没做的**（不算 bug，属后续任务）：远程歌词（待 P3）、播放页以外的横屏专项适配。
 
 ## 9. 如何验证
 

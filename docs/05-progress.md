@@ -574,3 +574,10 @@
 - [ ] 播放列表重启后数据不丢
 - [ ] 搜索本地 + 远程均有结果
 - [ ] 缓存清理后占用归零
+
+### 2026-11-12 · P4-04 · 播放页适配与 msop 启动图标
+- 做了什么：按用户要求更新播放器布局：竖屏当前歌词居中；横屏左侧为封面、曲目信息和播放控制，右侧只显示歌词行。横屏静态歌词不再显示额外的未同步状态行。使用用户上传的 `mslogo.png` 配置启动器图标，并将 Gradle 项目名设为 `msop`（应用名原本已是 `msop`）。
+- 改了哪些文件：`app/src/main/java/com/msop/player/ui/player/PlayerSheet.kt`、`app/src/main/AndroidManifest.xml`、`app/src/main/res/drawable-nodpi/msop_icon.png`、`app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml`、`app/src/main/res/values/colors.xml`、`settings.gradle.kts`、`AGENTS.md`、`TASKS.md`、`docs/07-ui-design.md`、`docs/design/prototype.html`。
+- 验证方式：`sh scripts/check.sh` → 自检通过；12 个模块、Version Catalog、禁用项和 UI 结构检查均通过；图标确认为 256×256 RGBA PNG。**本机补跑 `./gradlew test` → BUILD SUCCESSFUL，165 用例 0 失败**。
+- 遗留问题：改动初期有两处 `Modifier.padding(horizontal = …, top = …)` 的重载错误（Compose 没有这个组合），已改为 `start/end/top/bottom` 并通过编译；设备上的竖屏居中、横屏分栏与图标遮罩效果尚未真机确认。
+- 给下一位的提醒：优先运行 `./gradlew :app:assembleDebug test`，再检查竖屏歌词居中、横屏右侧无重复曲目信息或状态文案、启动器图标遮罩效果。

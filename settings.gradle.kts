@@ -20,7 +20,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Msop"
+rootProject.name = "msop"
 
 include(":app")
 
