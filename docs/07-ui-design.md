@@ -2,8 +2,8 @@
 
 > **状态：当前实现说明，不是提案** · 2026-11-12 重写
 > 唯一事实来源是 `app/src/main/java/com/msop/player/ui/`，令牌以 `ui/theme/Theme.kt` 为准。
-> 视觉基线：`preview/baseline/`（库页 / 播放中 / 播放页三张真机截图）。
-> 历史设计稿（v1.0 原型 `docs/design/prototype.html`、`preview/index.html` 及各版 redesign HTML）已于 2026-11-16 **移出仓库**，归档在本地 `archive/design-proposals/`，仅用于溯源。
+> 视觉基线：`../preview/baseline/`（库页 / 播放中 / 播放页三张真机截图）。
+> 历史设计稿（v1.0 原型 `docs/design/prototype.html`、`../preview/index.html` 及各版 redesign HTML）已于 2026-11-16 **移出仓库**，归档在本地 `../archive/design-proposals/`，仅用于溯源。
 >
 > **v1.0 已废弃**。重构前的「定稿提案」共 484 行，其中色彩、字号、圆角、组件路径、
 > 横屏规格与当前实现全部不符，§9.2 的 9 条组件路径无一存在。本次删除了这些章节及配套
@@ -179,14 +179,14 @@ UI 全部集中在 `app` 模块，**不按 feature 拆分**（`AGENTS.md` 已定
 
 | 路径 | 用途 |
 |---|---|
-| `preview/baseline/library.png` | 库页 · 空闲态（当前视觉基线） |
-| `preview/baseline/library_playing.png` | 库页 · 播放中（当前行高亮 + 迷你条） |
-| `preview/baseline/player.png` | 播放页 · 程序化封面 + 玻璃控件 |
+| `../preview/baseline/library.png` | 库页 · 空闲态（当前视觉基线） |
+| `../preview/baseline/library_playing.png` | 库页 · 播放中（当前行高亮 + 迷你条） |
+| `../preview/baseline/player.png` | 播放页 · 程序化封面 + 玻璃控件 |
 
-历史设计稿（`index.html` / `library-redesign.html` / `icons-redesign.html` / `lyrics-redesign.html` 与 v1.0 原型）已移出仓库，本地归档在 `archive/design-proposals/`。
+历史设计稿（`index.html` / `library-redesign.html` / `icons-redesign.html` / `lyrics-redesign.html` 与 v1.0 原型）已移出仓库，本地归档在 `../archive/design-proposals/`。
 
 改视觉后请重截前三张覆盖，避免再出现「截图里新旧两版混放」。
-`docs/05-progress.md` 里的历史记录描述的是当时发生的事，不随本文修订。
+`05-progress.md` 里的历史记录描述的是当时发生的事，不随本文修订。
 
 ---
 
@@ -200,7 +200,7 @@ v1.0 §10 的 8 条清单从未勾选，且多条针对已废弃的浅色 / 双�
 - [ ] 字体放大 200% 后列表标题不被截断
 - [ ] 横屏 1280×720 下布局（**当前未实现，见 §5 缺口 1**）
 - [ ] TalkBack 能走完「选歌 → 播放 → 暂停 → 下一首」（**当前存疑，见 §5 缺口 5**）
-- [ ] 改视觉后 `preview/baseline/` 三张截图同步更新
+- [ ] 改视觉后 `../preview/baseline/` 三张截图同步更新
 
 ---
 

@@ -411,7 +411,7 @@ DefaultMediaSourceFactory
   把索引写坏；且不能随 `PlaybackService.onDestroy` release（服务会反复重建）。
 - 清理缓存用 `Cache.removeResource(key)` 而不是直接删文件，否则 SQLite 索引会
   留下「说有、其实没了」的幽灵条目。
-- `docs/05` 走查清单里的「二次播放 < 1 秒」「切到蜂窝不自动缓存」需要在有设备的
+- `05-progress.md` 走查清单里的「二次播放 < 1 秒」「切到蜂窝不自动缓存」需要在有设备的
   环境里复验；本轮只做了编译、单测与 release 构建。
 
 ### 8.4 真机复验步骤（有设备时照跑）

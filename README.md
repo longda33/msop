@@ -54,21 +54,25 @@ sh scripts/check.sh                   # 完整性自检（不需要 JDK）
 环境：JDK 17+、Android SDK（compileSdk 37 / build-tools 37.0.0）、`local.properties` 填 `sdk.dir`。
 
 release 签名读根目录的 `keystore.properties`（与 `app/release.jks` 一起被 `.gitignore` 排除）。
-换机器按 [`USAGE.md`](USAGE.md) §6 重新生成即可；没有密钥时构建会退回 debug 签名，不会失败。
+换机器按 [`docs/USAGE.md`](docs/USAGE.md) §6 重新生成即可；没有密钥时构建会退回 debug 签名，不会失败。
 
 ## 文档
 
+> 除本文件外，仓库所有 Markdown 都在 [`docs/`](docs/) 目录。
+
 | 文件 | 内容 |
 |---|---|
-| [`INDEX.md`](INDEX.md) | **目录导航**：读什么 / 跳过什么、代码入口、常用命令、归档约定 |
-| [`AGENTS.md`](AGENTS.md) | 交接契约：当前状态、硬约束、下一步、踩过的坑 |
-| [`TASKS.md`](TASKS.md) | 分阶段任务与验收标准 |
-| [`USAGE.md`](USAGE.md) | 使用说明：权限、目录、OpenList 配置、播放、构建 |
+| [`docs/INDEX.md`](docs/INDEX.md) | **目录导航**：读什么 / 跳过什么、代码入口、常用命令、归档约定 |
+| [`docs/AGENTS.md`](docs/AGENTS.md) | 交接契约：当前状态、硬约束、下一步、踩过的坑（**AI 工具的项目规则也在这里**） |
+| [`docs/TASKS.md`](docs/TASKS.md) | 分阶段任务与验收标准 |
+| [`docs/USAGE.md`](docs/USAGE.md) | 使用说明：权限、目录、OpenList 配置、播放、构建 |
+| [`docs/BUILD-NOTES.md`](docs/BUILD-NOTES.md) | 构建环境备忘：JDK / SDK / Gradle 版本 |
 | [`docs/02-architecture.md`](docs/02-architecture.md) | 模块边界、数据流、公网安全、双通道扫描 |
 | [`docs/03-openlist-api.md`](docs/03-openlist-api.md) | OpenList 实测：原生 REST、Subsonic、WebDAV 与决策依据 |
 | [`docs/04-reference-index.md`](docs/04-reference-index.md) | 实现参考索引 |
 | [`docs/05-progress.md`](docs/05-progress.md) | 进度日志与踩坑记录 |
 | [`docs/07-ui-design.md`](docs/07-ui-design.md) | 当前 UI 设计说明：Aurora Glass 令牌、组件清单与优化待办 |
+| [`docs/08-shuyin-integration.md`](docs/08-shuyin-integration.md) | ShuYin 功能融合计划与验收记录（P7 来源） |
 | [`preview/baseline/`](preview/baseline/) | 当前界面基线截图（库页 / 播放中 / 播放页） |
 
 ## 说明

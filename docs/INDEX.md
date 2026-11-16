@@ -1,6 +1,6 @@
 # INDEX.md — 目录导航（接手先读这一页）
 
-> **目的**：任何模型接手本项目，读这一页就知道「读什么、跳过什么、改哪里、怎么跑」。不需要通读 `AGENTS.md`（100 KB）、`docs/05-progress.md`（217 KB）。
+> **目的**：任何模型接手本项目，读这一页就知道「读什么、跳过什么、改哪里、怎么跑」。不需要通读 `AGENTS.md`（100 KB）、`05-progress.md`（217 KB）。
 > 本页只做导航与状态快照，**唯一真相仍是 `TASKS.md`**；本页与 `TASKS.md` 冲突时以 `TASKS.md` 为准。
 
 ## 0. 三句话
@@ -16,10 +16,10 @@
 | 1 | 本页 `INDEX.md` | 全页（约 2 分钟） | 建地图，避免瞎翻 |
 | 2 | `AGENTS.md` 的 **§0 第 1–7 条** | 只读这七条（约 60 行） | 硬约束与「最容易踩的坑」清单，写代码前必读 |
 | 3 | `TASKS.md` 的 **总览表 + 第一个未完成行** | 约 30 行 | 分清已完成/未完成，别做重复工 |
-| 4 | 按任务领域选读：远程/缓存/Subsonic → `docs/03` §6–§8；UI 视觉 → `docs/07`；模块边界 → `docs/02`；找参考实现 → `docs/04` | 按需 `grep` 章节 | 全是按主题分好的，不要整篇读 |
-| 5 | 只有要查历史决策时才碰 `docs/05-progress.md` | **从文件尾往前搜日期**，别从头读 | 1861 行时间序日志，旧的已过时 |
+| 4 | 按任务领域选读：远程/缓存/Subsonic → `03-openlist-api.md` §6–§8；UI 视觉 → `07-ui-design.md`；模块边界 → `02-architecture.md`；找参考实现 → `04-reference-index.md` | 按需 `grep` 章节 | 全是按主题分好的，不要整篇读 |
+| 5 | 只有要查历史决策时才碰 `05-progress.md` | **从文件尾往前搜日期**，别从头读 | 1861 行时间序日志，旧的已过时 |
 
-**明确不要通读的**：`AGENTS.md` 第 2 节「最后更新」单元格（几百 KB 的历史流水）、`docs/05` 全文、`docs/08`（ShuYin 融合计划，577 行，只查具体条目）。这三处只在需要确证某个历史细节时用 `Grep` 定位。
+**明确不要通读的**：`AGENTS.md` 第 2 节「最后更新」单元格（几百 KB 的历史流水）、`05-progress.md` 全文、`08-shuyin-integration.md`（ShuYin 融合计划，577 行，只查具体条目）。这三处只在需要确证某个历史细节时用 `Grep` 定位。
 
 ## 2. 文件地图
 
@@ -30,15 +30,15 @@
 | `TASKS.md` | **唯一进度真相**：P0–P7 任务表、验收标准、变更记录 | 开工找任务、收工翻勾 |
 | `USAGE.md` | 使用说明：权限、目录、音源配置、播放、构建、重装换机 | 部署/装机/换机器 |
 | `BUILD-NOTES.md` | 构建环境备忘（JDK、SDK、Gradle 版本、R8） | 构建报错时 |
-| `docs/02-architecture.md` | 模块边界、数据流、双通道扫描、公网安全 | 改数据层/加模块 |
-| `docs/03-openlist-api.md` | **音源接口实测真相**：OpenList 原生 REST、OpenSubsonic、WebDAV、缓存链 | 碰任何远程音源前必读 §6–§8 |
-| `docs/04-reference-index.md` | 参考实现索引：去哪个 GitHub 仓库看哪个文件 | 不知道怎么写时先查这里 |
-| `docs/05-progress.md` | 逐轮进度日志与踩坑（**最新一轮在文件末尾**） | 查「某轮为什么这么改」 |
-| `docs/07-ui-design.md` | 当前 UI 设计说明：Aurora Glass 令牌、组件表、已知缺口 | 改视觉/加组件 |
-| `docs/08-shuyin-integration.md` | ShuYin 功能融合计划与验收记录（P7 来源） | 查 P7 某项的原始意图 |
-| `preview/baseline/` | 当前视觉基线 3 张截图（库页 / 播放中 / 播放页），**仓库里保留** | 改视觉后对照更新 |
-| `scripts/check.sh` | 工程完整性自检（不需要 JDK） | 提交前跑一遍 |
-| `archive/` | **非项目文件归档区**（见 §6），不入库、不参与构建 | 找历史设计稿/验收截图/旧交付包时 |
+| `02-architecture.md` | 模块边界、数据流、双通道扫描、公网安全 | 改数据层/加模块 |
+| `03-openlist-api.md` | **音源接口实测真相**：OpenList 原生 REST、OpenSubsonic、WebDAV、缓存链 | 碰任何远程音源前必读 §6–§8 |
+| `04-reference-index.md` | 参考实现索引：去哪个 GitHub 仓库看哪个文件 | 不知道怎么写时先查这里 |
+| `05-progress.md` | 逐轮进度日志与踩坑（**最新一轮在文件末尾**） | 查「某轮为什么这么改」 |
+| `07-ui-design.md` | 当前 UI 设计说明：Aurora Glass 令牌、组件表、已知缺口 | 改视觉/加组件 |
+| `08-shuyin-integration.md` | ShuYin 功能融合计划与验收记录（P7 来源） | 查 P7 某项的原始意图 |
+| `../preview/baseline/` | 当前视觉基线 3 张截图（库页 / 播放中 / 播放页），**仓库里保留** | 改视觉后对照更新 |
+| `../scripts/check.sh` | 工程完整性自检（不需要 JDK） | 提交前跑一遍 |
+| `../archive/` | **非项目文件归档区**（见 §6），不入库、不参与构建 | 找历史设计稿/验收截图/旧交付包时 |
 
 ## 3. 代码入口（想改什么 → 改哪）
 
@@ -73,7 +73,7 @@
 | P7-03 断网保护 | `[~]` | 断网暂停/恢复不续播/本地曲不受影响已验；**「缓冲中…」提示缺低速网络条件** |
 | P7-12 libFLAC Native | `[!]` | 本机无 NDK/CMake，且 Media3 未发布 `media3-decoder-flac` AAR |
 
-最近一轮（第十五轮 r16/r17/r18）做了什么、证据在哪：见 `AGENTS.md` §0.5 与 `docs/05` 末节。
+最近一轮（第十五轮 r16/r17/r18）做了什么、证据在哪：见 `AGENTS.md` §0.5 与 `05-progress.md` 末节。
 
 ## 5. 常用命令（Windows PowerShell）
 
@@ -90,7 +90,7 @@ Start-Process -FilePath "$env:JAVA_HOME\bin\java.exe" `
 
 # 单测 / 自检
 & ".\gradlew.bat" test            # 或同样用 java 起 wrapper
-sh scripts/check.sh              # 完整性自检，不需要 JDK
+sh ../scripts/check.sh              # 完整性自检，不需要 JDK
 
 # 装机 + 看日志
 & $ADB -s emulator-5554 install -r -t "$root\app\build\outputs\apk\debug\app-debug.apk"
@@ -102,22 +102,23 @@ sh scripts/check.sh              # 完整性自检，不需要 JDK
 
 环境：`JAVA_HOME=C:\Program Files\Microsoft\jdk-21.0.13.21-hotspot\`；SDK compileSdk 37 / build-tools 37.0.0。
 
-## 6. 归档区 `archive/` 约定
+## 6. 归档区 `../archive/` 约定
 
 | 子目录 | 放什么 |
 |---|---|
-| `archive/2026-11-15-drag-debug/` | 那一轮手势/异色块排查的根目录截图与 uiautomator dump |
-| `archive/reference-shuyin/` | ShuYin 界面参考图（4 张） |
-| `archive/reference-device-verification/` | 旧版设备验收截图（原 `docs/reference/device-verification`，2026-11-16 移出仓库） |
-| `archive/design-proposals/` | 历史设计稿 HTML（`index.html`、`library/icons/lyrics-redesign.html`）与 v1.0 原型，2026-11-16 移出仓库 |
-| `archive/deliverables/` | 给用户的「仅改动文件」zip，**只留最新一个**（交付新包时删旧包） |
+| `../archive/2026-11-15-drag-debug/` | 那一轮手势/异色块排查的根目录截图与 uiautomator dump |
+| `../archive/reference-shuyin/` | ShuYin 界面参考图（4 张） |
+| `../archive/reference-device-verification/` | 旧版设备验收截图（原 `docs/reference/device-verification`，2026-11-16 移出仓库） |
+| `../archive/design-proposals/` | 历史设计稿 HTML（`index.html`、`library/icons/lyrics-redesign.html`）与 v1.0 原型，2026-11-16 移出仓库 |
+| `../archive/deliverables/` | 给用户的「仅改动文件」zip，**只留最新一个**（交付新包时删旧包） |
 
 **目录纪律**（后续接手请遵守）：
 
-- 仓库根只放：源码模块（`app` `core` `feature`）、构建文件（`gradle*` `settings.gradle.kts` `build.gradle.kts` `*.properties`）、6 份文档（`README` `AGENTS` `TASKS` `USAGE` `BUILD-NOTES` `INDEX`）。
-- **进 GitHub 的只有**：源码 + Markdown 文档 + `preview/baseline/` 三张基线图 + `gradlew*`/`scripts/`。历史设计稿、旧验收截图、过程截图一律在 `archive/`（已被 `.gitignore` 排除）。
+- 仓库根只放：源码模块（`app` `core` `feature`）、构建文件（`gradle*` `settings.gradle.kts` `build.gradle.kts` `*.properties`），以及 **`README.md` 这唯一一份根级 Markdown**。
+- **其余 Markdown 全部在 `docs/`**（本页同目录）：`AGENTS.md` `TASKS.md` `USAGE.md` `BUILD-NOTES.md` `02`–`08`。新增文档也放这里，不要再落回仓库根。
+- **进 GitHub 的只有**：源码 + Markdown 文档 + `../preview/baseline/` 三张基线图 + `gradlew*`/`../scripts/`。历史设计稿、旧验收截图、过程截图一律在 `../archive/`（已被 `.gitignore` 排除）。
 - 临时产物（设备截图、logcat dump、uiautomator xml、反编译解包、`.raw` 录屏）**一律放 `%TEMP%\<轮次>shots\`**，不要落进项目根或被 git 跟踪。
-- 确实值得留档的非项目文件 → `archive/<主题>/`，并在提交说明里写清来源。
+- 确实值得留档的非项目文件 → `../archive/<主题>/`，并在提交说明里写清来源。
 
 ## 7. 一页避坑（详见 `AGENTS.md` §0 第 6 条）
 
@@ -128,4 +129,4 @@ sh scripts/check.sh              # 完整性自检，不需要 JDK
 - 二级页 overlay 必须是根 `Box` 的兄弟节点，不能塞进 `HazeTitleScaffold` 的 content。
 - `PlayMode` 4 档，任何 `when(PlayMode)` 都要补分支。
 - 模拟器造计费网络 / 断网的正规手法见 `AGENTS.md` D29；**别从 PC 侧关 Wi-Fi 或开飞行模式**，会把 adb 打掉。
-- 改结论时同步三处：`AGENTS.md`（对应轮次段）、`docs/05-progress.md`（末节）、`TASKS.md`（状态行 + 变更记录）。
+- 改结论时同步三处：`AGENTS.md`（对应轮次段）、`05-progress.md`（末节）、`TASKS.md`（状态行 + 变更记录）。

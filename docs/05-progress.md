@@ -25,26 +25,26 @@
 - 遗留问题：
   1. OpenList 的 Subsonic 挂载路径与接口完整度**尚未实测**，是 P3-01 的首要工作。
   2. 用户尚未提供本机音乐目录位置与 OpenList 部署方式（局域网/公网），P1-04 与 P3-06 开工前需要确认。
-- 给下一位的提醒：**不要跳过 P3-01 的实测直接写 Subsonic 客户端**。`docs/03` 里所有标 ⚠️ 的接口都必须先用 curl 验证再落代码。
+- 给下一位的提醒：**不要跳过 P3-01 的实测直接写 Subsonic 客户端**。`03-openlist-api.md` 里所有标 ⚠️ 的接口都必须先用 curl 验证再落代码。
 
 ### 2026-11-10 · P0-00b · 确认部署形态，任务表扩容至 38 项
 - 做了什么：用户确认两个关键参数——**本机默认使用标准目录（MediaStore）、支持自定义目录（SAF）**；**OpenList 部署在公网**。据此调整架构与任务表。
 - 改了哪些文件：
   - `AGENTS.md`：状态区新增两行参数；硬约束新增第 7、8 条（强制 HTTPS、双通道去重）；决策表新增 D7–D10
-  - `docs/02-architecture.md`：新增 §8 公网访问与网络安全（HTTPS 配置、反代子路径、自签证书、超时与流量）、§9 本机扫描双通道（MediaStore / SAF 性能写法 / 去重规则）；风险表新增 3 行
-  - `docs/03-openlist-api.md`：新增 §1.1 公网部署四个前提；curl 模板改为公网子路径写法并加证书诊断步骤
+  - `02-architecture.md`：新增 §8 公网访问与网络安全（HTTPS 配置、反代子路径、自签证书、超时与流量）、§9 本机扫描双通道（MediaStore / SAF 性能写法 / 去重规则）；风险表新增 3 行
+  - `03-openlist-api.md`：新增 §1.1 公网部署四个前提；curl 模板改为公网子路径写法并加证书诊断步骤
   - `TASKS.md`：P1 从 7 项拆为 9 项（MediaStore / 权限 / SAF / 去重 独立成任务）；P3 从 6 项增至 7 项（新增 P3-06 网络安全配置）；总任务 35 → 38，工期 8–10 周 → 9–11 周
 - 验证方式：文档一致性自查，任务号与依赖引用已全部对齐。
-- 遗留问题：OpenList 的 Subsonic 挂载路径仍待 P3-01 实测；公网域名与是否有反代子路径需用户提供后填进 `docs/03` 的 curl 模板。
+- 遗留问题：OpenList 的 Subsonic 挂载路径仍待 P3-01 实测；公网域名与是否有反代子路径需用户提供后填进 `03-openlist-api.md` 的 curl 模板。
 - 给下一位的提醒：**写 URL 一律用 `HttpUrl.newBuilder().addPathSegments()`，禁止字符串拼接**——公网带子路径时字符串拼接必错，这是本项目最容易踩的坑。
 
 ### 2026-11-10 · P0-00c · 澄清「反代子路径」，补 URL 规范化规则
 - 做了什么：解释反向代理子路径的两种挂法（独立域名根路径 / 域名下的 `/openlist` 前缀），并决定**不依赖用户预先判断属于哪种**，改为在配置页做 URL 规范化，两种情况通吃。
 - 改了哪些文件：
-  - `docs/03-openlist-api.md`：新增 §1.2 URL 规范化规则（补协议、去尾斜杠、去重复斜杠、剥误粘的 `index.html`），附 `normalizeBaseUrl()` 参考实现
+  - `03-openlist-api.md`：新增 §1.2 URL 规范化规则（补协议、去尾斜杠、去重复斜杠、剥误粘的 `index.html`），附 `normalizeBaseUrl()` 参考实现
   - `TASKS.md`：P3-07 验收标准加入规范化用例
 - 验证方式：文档自查。
-- 遗留问题：仍建议用户提供实际公网地址，用于把 `docs/03` 的 curl 模板填成可直接执行的版本（P3-01 要用）。
+- 遗留问题：仍建议用户提供实际公网地址，用于把 `03-openlist-api.md` 的 curl 模板填成可直接执行的版本（P3-01 要用）。
 - 给下一位的提醒：URL 规范化必须在**保存配置时**做一次并落库，不要每次请求都算。
 
 ### 2026-11-10 · P0-01 ~ P0-03 · 骨架代码落地（待首次构建验证）
@@ -65,7 +65,7 @@
 - 改了哪些文件：
   - 删除：`feature/library/.../ui/LibraryScreen.kt`、`MockLibraryData.kt`
   - 还原：`feature/{library,player,settings}/build.gradle.kts`
-  - 重写：`docs/06-ui-spec.md` §8（待确认 Q1–Q4）、§9（还原度评估）（该文档后续已删除）
+  - 重写：`06-ui-spec.md` §8（待确认 Q1–Q4）、§9（还原度评估）（该文档后续已删除）
   - `AGENTS.md`：决策表移除 D13–D15，改为「UI 全部未定」；禁止事项新增「UI 未确认前不写界面代码」
   - 新增：`docs/reference/reference-ios/` 四张官方截图（后续已删除）
 - 验证方式：`find` 确认工程内无 `*Screen*.kt` / `*Player*.kt` / `*Mock*.kt`。
@@ -77,9 +77,9 @@
 - 改了哪些文件：
   - 重写 `AGENTS.md`：新增 §0 五分钟接手、§6 已存在文件清单、§8 三条并行线、§12 已知风险表；数据契约章节由 §5 移到 §7 并与 `core/model/Track.kt` 实际字段对齐
   - `TASKS.md`：新增「⏸ 挂起」说明（P1-09、P2-05、P4-01～05、P5-02）；P1-01 改为 `[?]`；总览 P1 状态更新
-  - `README.md`：顶部加当前进度提示；目录树补全 BUILD-NOTES、docs/05–06、reference
-  - 新增 `scripts/check.sh`：无需 JDK 的完整性自检（构建文件、TOML 解析、模块目录、源码存在性、禁用插件、UI 代码状态）
-- 验证方式：`sh scripts/check.sh` 六项全部通过；`find` 核对 53 个文件与文档描述一致；`grep` 确认无残留的 `AGENTS.md §5` 失效引用。
+  - `README.md`：顶部加当前进度提示；目录树补全 BUILD-NOTES、05-progress.md–06、reference
+  - 新增 `../scripts/check.sh`：无需 JDK 的完整性自检（构建文件、TOML 解析、模块目录、源码存在性、禁用插件、UI 代码状态）
+- 验证方式：`sh ../scripts/check.sh` 六项全部通过；`find` 核对 53 个文件与文档描述一致；`grep` 确认无残留的 `AGENTS.md §5` 失效引用。
 - 遗留问题：无新增。原有三项风险（未编译、Hilt/KSP 兼容性、Subsonic 接口完整度）已写入 `AGENTS.md` §12。
 - 给下一位的提醒：**先跑构建，再写代码**。当前工程 53 个文件全部未经编译，任何功能开发都应等 `assembleDebug` 通过之后再开始。
 
@@ -208,7 +208,7 @@
 
 | 任务 | 结论 | 证据 |
 |---|---|---|
-| P0-03 | ✅ 通过 | 截图 `archive/reference-device-verification/02-main-tabs.png`（已移出仓库）：三 Tab 可见可切换 |
+| P0-03 | ✅ 通过 | 截图 `../archive/reference-device-verification/02-main-tabs.png`（已移出仓库）：三 Tab 可见可切换 |
 | P0-04 | ✅ 通过 | logcat：`Application onCreate 开始` / `崩溃捕获已安装，启动完成` |
 | P1-03 | ✅ 通过 | 1003 首全量 **376ms**、增量 **35ms**；外推 1 万首约 3.8s |
 | P1-04 | ⚠️ 部分 | 门禁渲染与授权放行已验证（截图 `01-permission-gate.png`）；**拒绝/重试无法验证** |
@@ -389,7 +389,7 @@
 
 - 背景：`docs/06` 从 11-10 起就停在「草案 · 未确认」，Q1–Q4 悬着，P1-09 / P2-05 / P4-\* / P5-02 全部挂起。数据层和播放内核已经把能做的都做完了，UI 成了唯一瓶颈。
 - 本轮产出两份东西，都是**设计物，不是代码**（`feature/*/ui/` 依旧没动）：
-  1. `docs/07-ui-design.md` —— 定稿提案，回答 Q1–Q4，给出色彩/字体/间距令牌、9 屏规格、手势总表、横屏适配、无障碍要求、Compose 落地映射与验收清单。
+  1. `07-ui-design.md` —— 定稿提案，回答 Q1–Q4，给出色彩/字体/间距令牌、9 屏规格、手势总表、横屏适配、无障碍要求、Compose 落地映射与验收清单。
   2. `docs/design/prototype.html` —— 单文件离线原型，8 屏手机 + 1 屏横屏，点击屏幕内的导航/播放条能真的走一遍。支持 `#player`、`#queue` 这类锚点直达。
 - 四个决策：**3 Tab**（音乐库/搜索/设置，歌单移到音乐库顶栏）/ **歌曲行显示 44dp 封面**（另给紧凑模式）/ **播放页用自定义全屏浮层**（不是 `ModalBottomSheet`）/ **B 路线**（Material 3 承载既定视觉语言）。
 - 两个自有主张，是这版和 06 草案最大的区别：
@@ -398,7 +398,7 @@
 - 顺带修掉一个 06 没意识到的问题：**真机是 1280×720 横屏**，而 06 只写了手机竖屏。07 补了三档断点（<600 / 600–839 / ≥840），横屏走 `NavigationRail` + 双栏，队列面板改成右侧抽屉。
 - 验证方式：浏览器直接打开 `docs/design/prototype.html`。已用 Edge 无头模式逐屏截图核对过，修掉了三个渲染问题——首屏透明度动画不收敛导致整体发灰、队列页继承了浅色主题的深色文字在黑底上不可见、手机外框尺寸公式漏算 padding 导致高度被压。
 - 给下一位的提醒：
-  1. **用户没点头之前仍然不要写界面代码**，`docs/07` §10 的验收清单是给实现阶段的，不是开工许可。
+  1. **用户没点头之前仍然不要写界面代码**，`07-ui-design.md` §10 的验收清单是给实现阶段的，不是开工许可。
   2. 实现顺序别改：`UiTokens.kt` → `TrackRow` + 歌曲页 → `MiniPlayer` + `PlayerSheet`。先把「点歌能放、能收起」跑通，再铺其他屏。
   3. 三个技术风险点写在 07 §9.3，其中**共享元素转场**最容易翻车——`SharedTransitionLayout` 不稳就降级成「淡入 + scale 0.92→1」，视觉损失可接受，别在这上面耗三天。
 
@@ -406,7 +406,7 @@
 
 ### 2026-11-11 · UI 落地 · 11 个文件，编译通过，APK 20 MB
 
-- 用户确认「修改项目UI」后开工。**视觉基准是 `preview/index.html`**（照搬既定设计的深色 + 蓝色 + 胶囊形态，结构照搬 NeriPlayer / MusicFree），不是 `docs/07` 那版浅色双主题。
+- 用户确认「修改项目UI」后开工。**视觉基准是 `../preview/index.html`**（照搬既定设计的深色 + 蓝色 + 胶囊形态，结构照搬 NeriPlayer / MusicFree），不是 `07-ui-design.md` 那版浅色双主题。
 - 新增 11 个文件，全部在 `app/src/main/java/com/reference/lite/ui/`：
   `MsopApp.kt`、`theme/Theme.kt`、`icons/PlayerIcons.kt`、`components/TrackRow.kt`、`components/MiniPlayer.kt`、`library/LibraryScreen.kt`、`library/AlbumDetail.kt`、`library/LibraryViewModel.kt`、`player/PlayerSheet.kt`、`player/QueueSheet.kt`、`search/SearchScreen.kt`、`settings/SettingsScreen.kt`。
 - 三个值得记的决定：
@@ -416,7 +416,7 @@
 - 顺手清理：删掉 `AudioFocusProbe` 与「模拟来电打断」按钮（P2-04 已验收，AGENTS 里早写明 P4-05 重写设置页时删）；`PlaybackController` 新增 `currentPositionMs()`，给进度条轮询用——不放进 `PlaybackState` 是因为 `Player.Listener` 只在事件时回调，播放中不推位置，让可见的页面自己拉更省。
 - 编译踩的坑：`ImageVector.Builder.path` 是扩展函数，必须 `import androidx.compose.ui.graphics.vector.path`；`Icons.Filled.PlayArrow` 也要单独 import（`Icons.Filled` 只提供对象本身，不导出成员）。
 - **未验证**：设备当时不在线（`adb connect 127.0.0.1:5555` 拒绝连接），只做到编译通过 + 单测通过，**一次都没装到真机上跑**。验收清单写在 AGENTS §8「UI 已落地，待真机验收」，第一件事是装机。
-- 给下一位：`scripts/check.sh` 第 6 项已改，现在检查 `app/ui` 而不是 `feature/*/ui`，别再被旧提示误导。
+- 给下一位：`../scripts/check.sh` 第 6 项已改，现在检查 `app/ui` 而不是 `feature/*/ui`，别再被旧提示误导。
 
 ---
 
@@ -487,12 +487,12 @@
 ### 2026-11-11 · P3-01 ~ P3-07 · OpenList 远程音源端到端打通（阻塞解除）
 
 - 做了什么：
-  1. 用户提供真实公网地址与账号，P3 阻塞解除。**先实测再写码**：本机默认代理对 `*.koyeb.app` 返回 502、直连超时，只有 `--proxy http://127.0.0.1:10808` 通。结论：OpenList v4.2.9 **未启用 Subsonic**（真实路由 `@rest` 前缀返回 404，`media_enabled=false`，账号 `role=0` 非 admin 无法开启）；WebDAV `PROPFIND /dav/` 返回 207 可用但 GET 是 302；**原生 REST 全通**且 `raw_url` 支持 206 Range。据实测反证把决策 D3 从 Subsonic 修订为「OpenList 原生 REST 主通道」，完整响应样例见 `docs/03` §6。
+  1. 用户提供真实公网地址与账号，P3 阻塞解除。**先实测再写码**：本机默认代理对 `*.koyeb.app` 返回 502、直连超时，只有 `--proxy http://127.0.0.1:10808` 通。结论：OpenList v4.2.9 **未启用 Subsonic**（真实路由 `@rest` 前缀返回 404，`media_enabled=false`，账号 `role=0` 非 admin 无法开启）；WebDAV `PROPFIND /dav/` 返回 207 可用但 GET 是 302；**原生 REST 全通**且 `raw_url` 支持 206 Range。据实测反证把决策 D3 从 Subsonic 修订为「OpenList 原生 REST 主通道」，完整响应样例见 `03-openlist-api.md` §6。
   2. `core:datastore` 落地服务器配置 + JWT 缓存；`core:network` 落地 `ServerUrl`（补协议/去尾斜杠/剥误粘页面名 + `HttpUrl.addPathSegments` 拼路径）、`OpenListClient`（登录、列目录、取直链、401 重登、HTTP 码与业务码双层映射、中文错误）、`StreamUrlResolver` + Hilt `@Binds`。
   3. `feature:remote` 落地 `RemoteIdFactory`、`RemoteTrackMapper`、`RemoteLibrarySyncer`（BFS 递归列目录、音频后缀过滤、按 `idsBySource` 做差集清理、扫到 0 首时跳过清理的安全阀）。
   4. `PlayerFactory` 的 `ResolvingDataSource` 从恒等转发换成真实接缝：起播 / seek 重新打开 DataSpec 时把 `openlist:/路径` 换成新鲜 `raw_url`；`PlayerFactory` 改由 Hilt 注入，`PlaybackService` 用 `@Inject`。
   5. `network_security_config.xml` 全局禁明文 + 允许 user CA；配置页支持 URL 规范化、`http://` 二次确认、测试连接、保存并同步、清除配置与远程曲目。
-- 改了哪些文件：新增 `core/datastore/{ServerConfig,ServerConfigStore}.kt`、`core/network/{ServerUrl,OpenListDtos,OpenListException,StreamUrlResolver,OpenListClient}.kt` + `di/NetworkModule.kt`、`feature/remote/{RemoteIdFactory,RemoteTrackMapper,RemoteLibrarySyncer}.kt`、`app/ui/settings/{OpenListConfigScreen,OpenListViewModel,BatteryOptimization}.kt`、`app/src/main/res/xml/network_security_config.xml`、`USAGE.md`；修改 `PlayerFactory.kt`、`PlaybackService.kt`、`MsopApp.kt`、`SettingsScreen.kt`、`MainActivity.kt`、`AndroidManifest.xml`、4 个模块的 `build.gradle.kts`、`docs/03-openlist-api.md`、`AGENTS.md`、`TASKS.md`。删除三个已落地模块的 `ModuleMarker.kt`。
+- 改了哪些文件：新增 `core/datastore/{ServerConfig,ServerConfigStore}.kt`、`core/network/{ServerUrl,OpenListDtos,OpenListException,StreamUrlResolver,OpenListClient}.kt` + `di/NetworkModule.kt`、`feature/remote/{RemoteIdFactory,RemoteTrackMapper,RemoteLibrarySyncer}.kt`、`app/ui/settings/{OpenListConfigScreen,OpenListViewModel,BatteryOptimization}.kt`、`app/src/main/res/xml/network_security_config.xml`、`USAGE.md`；修改 `PlayerFactory.kt`、`PlaybackService.kt`、`MsopApp.kt`、`SettingsScreen.kt`、`MainActivity.kt`、`AndroidManifest.xml`、4 个模块的 `build.gradle.kts`、`03-openlist-api.md`、`AGENTS.md`、`TASKS.md`。删除三个已落地模块的 `ModuleMarker.kt`。
 - 验证方式：
   - `./gradlew test` → debug **18 文件 / 154 用例 0 失败**（新增 40 个：URL 规范化 11、均衡器 14、远程映射 9、队列拖拽 6）。
   - 真机（emulator-5554 / Android 12，设 `settings put global http_proxy 10.0.2.2:10808` 借道主机代理）：保存并同步 → `扫描 23 项 · 写入 23 首 · 清理 0 条 · 454 ms`，DB `LOCAL|508 / OPENLIST|23`；搜索「Butter-Fly」命中远程歌；点播 → `state=3`、`CCodecConfig: audio/flac`、无 `ExoPlaybackException`；拖动进度条 → position `68129 → 208546` 且仍 `state=3`（Range + 直链刷新都生效）。
@@ -510,7 +510,7 @@
   4. **补两个已知缺口**：设置页「本机目录」改成可列出/移除目录（移除时释放 persistableUriPermission + 全量重扫）；队列加长按手柄拖拽（拖动中只累计位移+高亮，松手才 `moveInQueue`，避免 Compose 重组吞手势）。
   5. **release 打包**：生成自签名 `app/release.jks` + `keystore.properties`（都进 `.gitignore`），`isMinifyEnabled/isShrinkResources = true`，补 R8 规则（重点是 kotlinx.serialization 的 `$$serializer`）；`USAGE.md` 交付。
 - 验证方式：
-  - `sh scripts/check.sh` 六项全过；`./gradlew test` 通过；`:app:assembleDebug` 19.3 MB、`:app:assembleRelease` **3.0 MB**（5m4s，V2 签名 `apksigner verify` 通过）。
+  - `sh ../scripts/check.sh` 六项全过；`./gradlew test` 通过；`:app:assembleDebug` 19.3 MB、`:app:assembleRelease` **3.0 MB**（5m4s，V2 签名 `apksigner verify` 通过）。
   - 均衡器真机：显示「已连接播放器 · 5 段 · 已关闭 audio offload」，点「摇滚」后 5 段变为 `+3.5/-1.0/+1.0/+3.5/+4.0 dB`，logcat `均衡器预设=摇滚`，设置页变「已启用」。
   - **release 包真机回归**（先 `adb uninstall` 再装）：权限门禁 → 授予 → 本地扫描出歌 → 配置页输入域名/账号/密码 → 自动补 `https://` → 同步 `23 首 / 867 ms` → 搜索远程歌 → 播放 `state=3`、metadata 正确、`AndroidRuntime:E` 与 `ExoPlaybackException` 均无输出。R8 没有误删 Media3 / Hilt / Room / kotlinx.serialization。
 - 遗留问题：P5-04 大库性能、P6-01 走查清单未逐条勾；`./gradlew test` 偶发一次 `kspReleaseKotlin` 报 `OpenListClient could not be resolved`（debug/release 并行竞态，重跑即过，非代码问题）；`lintVitalRelease` 会误报 `PlaybackService` 的 `Instantiatable`（服务在 feature 模块、父类来自 implementation 依赖），manifest 已局部 `tools:ignore`，别删。
@@ -526,7 +526,7 @@
   3. 两个否决项：`stream` 302 跳到 **`http://`** 明文 `/d/...?sign=`，被 `network_security_config` 拦；Subsonic 的 `path` 是服务器绝对路径，喂给 `/api/fs/get` 返回 `500 object not found`（要相对用户根目录的路径）。**因此流播不切 Subsonic**。
   4. 落地混合方案：`core:network` 新增 `SubsonicDtos` / `SubsonicClient`（`@rest` + `apiKey`、`search3` 分页、`HttpUrl` 拼 `getCoverArt`、错误码 40/50 归为鉴权失败）；`core:datastore` 配置加可选 `appKey`；`feature:remote` 新增 `SubsonicMetadata`（按**文件名**匹配，纯函数），同步后补全 `title/artist/album/albumId/mimeType/size/coverUri`，失败只降级；配置页加「Subsonic 应用密钥（可选）」并显示是否启用。
   5. 修掉两个「静默不显示」的封面 bug：① app 只依赖 `coil-compose`、**缺 `coil-network-okhttp`**，本地 `file://` 正常、远程 `https://` 静默失败；② 补依赖后 debug 正常、**release 又变占位**——R8 删掉了 Coil 的 `META-INF/services/coil3.util.FetcherServiceLoaderTarget` 与实现类。最终在 `MsopApplication` 显式实现 `SingletonImageLoader.Factory` 并 `add(OkHttpNetworkFetcherFactory())`，proguard 里加 keep 兜底。
-- 改了哪些文件：新增 `core/network/{SubsonicDtos,SubsonicClient}.kt`、`feature/remote/SubsonicMetadata.kt`、`feature/remote/src/test/.../SubsonicMetadataTest.kt`；修改 `core/datastore/{ServerConfig,ServerConfigStore}.kt`、`feature/remote/RemoteLibrarySyncer.kt`、`app/ui/settings/{OpenListViewModel,OpenListConfigScreen}.kt`、`app/build.gradle.kts`（coil 依赖）、`docs/03`（新增 §7）、`AGENTS.md`、`TASKS.md`、`USAGE.md`。
+- 改了哪些文件：新增 `core/network/{SubsonicDtos,SubsonicClient}.kt`、`feature/remote/SubsonicMetadata.kt`、`feature/remote/src/test/.../SubsonicMetadataTest.kt`；修改 `core/datastore/{ServerConfig,ServerConfigStore}.kt`、`feature/remote/RemoteLibrarySyncer.kt`、`app/ui/settings/{OpenListViewModel,OpenListConfigScreen}.kt`、`app/build.gradle.kts`（coil 依赖）、`03-openlist-api.md`（新增 §7）、`AGENTS.md`、`TASKS.md`、`USAGE.md`。
 - 验证方式：
   - `:core:network:testDebugUnitTest`、`:feature:remote:testDebugUnitTest`、`:app:assembleDebug` 全过；`SubsonicMetadataTest` 11 个用例。
   - 真机（emulator-5554）：配置页输入 45 位密钥 → `同步完成：扫描 23 项 · 写入 23 首 · 补全 23 首 · 清理 0 条 · 8476 ms`；DB `23 首 / 23 有封面 / 23 有艺术家 / 23 有 albumId`；样本 `Rage Your Dream · m.o.v.e · 頭文字D Final Best Collection`；列表显示真实 JPEG 封面，Coil 磁盘缓存 180 KB；点播 `state=3`、metadata 正确、无 `ExoPlaybackException`。
@@ -577,8 +577,8 @@
 
 ### 2026-11-12 · P4-04 · 播放页适配与 msop 启动图标
 - 做了什么：按用户要求更新播放器布局：竖屏当前歌词居中；横屏左侧为封面、曲目信息和播放控制，右侧只显示歌词行。横屏静态歌词不再显示额外的未同步状态行。使用用户上传的 `mslogo.png` 配置启动器图标，并将 Gradle 项目名设为 `msop`（应用名原本已是 `msop`）。
-- 改了哪些文件：`app/src/main/java/com/msop/player/ui/player/PlayerSheet.kt`、`app/src/main/AndroidManifest.xml`、`app/src/main/res/drawable-nodpi/msop_icon.png`、`app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml`、`app/src/main/res/values/colors.xml`、`settings.gradle.kts`、`AGENTS.md`、`TASKS.md`、`docs/07-ui-design.md`、`docs/design/prototype.html`。
-- 验证方式：`sh scripts/check.sh` → 自检通过；12 个模块、Version Catalog、禁用项和 UI 结构检查均通过；图标确认为 256×256 RGBA PNG。**本机补跑 `./gradlew test` → BUILD SUCCESSFUL，165 用例 0 失败**。
+- 改了哪些文件：`app/src/main/java/com/msop/player/ui/player/PlayerSheet.kt`、`app/src/main/AndroidManifest.xml`、`app/src/main/res/drawable-nodpi/msop_icon.png`、`app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml`、`app/src/main/res/values/colors.xml`、`settings.gradle.kts`、`AGENTS.md`、`TASKS.md`、`07-ui-design.md`、`docs/design/prototype.html`。
+- 验证方式：`sh ../scripts/check.sh` → 自检通过；12 个模块、Version Catalog、禁用项和 UI 结构检查均通过；图标确认为 256×256 RGBA PNG。**本机补跑 `./gradlew test` → BUILD SUCCESSFUL，165 用例 0 失败**。
 - 遗留问题：改动初期有两处 `Modifier.padding(horizontal = …, top = …)` 的重载错误（Compose 没有这个组合），已改为 `start/end/top/bottom` 并通过编译；设备上的竖屏居中、横屏分栏与图标遮罩效果尚未真机确认。
 - 给下一位的提醒：优先运行 `./gradlew :app:assembleDebug test`，再检查竖屏歌词居中、横屏右侧无重复曲目信息或状态文案、启动器图标遮罩效果。
 
@@ -595,12 +595,12 @@
   6. 首启 `AudioPermissionGate` 改为极光背景 + 生成封面圆盘 + 玻璃说明卡；`EqualizerScreen` / `OpenListConfigScreen` 补 AmbientBackground 与玻璃状态卡。
   7. 修复歌词「手动拖动后跟随不恢复」：原 `LaunchedEffect(dragged)` 在松手早于 5s 时被取消，`autoFollow` 永远停在 false；改为拖拽中暂停、松手后延迟 5s 恢复。
   8. 新增 `PlayerIcons.Filter` 漏斗图标。
-- 涉及文件：`ui/` 下 15 个修改 + 2 个新增（`Surfaces.kt`、`Artwork.kt`）；`AGENTS.md`、`TASKS.md`、`docs/05`、`docs/07`。
+- 涉及文件：`ui/` 下 15 个修改 + 2 个新增（`Surfaces.kt`、`Artwork.kt`）；`AGENTS.md`、`TASKS.md`、`05-progress.md`、`07-ui-design.md`。
 - 验证方式：
   - `.\gradlew.bat :app:assembleDebug` BUILD SUCCESSFUL（debug APK 19.1 MB）
   - `.\gradlew.bat test` BUILD SUCCESSFUL（19 个测试类 / 168 个用例，0 失败）
   - `.\gradlew.bat :app:assembleRelease` BUILD SUCCESSFUL（release APK 3.3 MB，R8 + V2）
-  - `sh scripts/check.sh` 自检通过（12 模块、24 个 UI 文件、未误用 kotlin.android、未开明文流量）
+  - `sh ../scripts/check.sh` 自检通过（12 模块、24 个 UI 文件、未误用 kotlin.android、未开明文流量）
 - 遗留问题：本机 `adb devices` 为空，SDK 无 emulator/system-images，**无法安装 APK 做纯视觉与手势走查**；功能路径未改，但仍需在有设备时复验小屏/横屏、底部导航与迷你条重叠、播放页歌词滚动、权限页。
 - 给下一位：改 UI 从 `ui/theme/Theme.kt` 的令牌开始，不要在各页面另调色值；缺封面一律走 `GeneratedArtwork(seed = track.artSeed())`，不要再加灰底占位；UI 仍未拆到 `feature/*`，别把界面挪进 feature 模块。
 
@@ -613,7 +613,7 @@
      二次播放 / 拖回已听过的区间直接从本地读；本机文件不进缓存。
   2. **链的顺序是本任务的核心**：`CacheDataSource` 包在 `ResolvingDataSource`
      **外面**，缓存 key 用稳定的 `openlist:/路径`。这样 key 不受 raw_url 的
-     tempauth 影响，且缓存全命中时连 `/api/fs/get` 都不用调（详见 `docs/03` §8.1）。
+     tempauth 影响，且缓存全命中时连 `/api/fs/get` 都不用调（详见 `03-openlist-api.md` §8.1）。
   3. 新增「仅 Wi-Fi 缓存」开关（默认开）。开启时蜂窝网络下**不写新缓存**，
      但已缓存内容照常读、照常播：构造 `CacheDataSource` 时把写侧 `DataSink`
      传 `null`，Media3 走只读路径。开关在每次创建 DataSource 时同步重读，
@@ -628,9 +628,9 @@
   `feature/player/src/test/.../cache/MediaCachePolicyTest.kt`；
   修改 `PlayerFactory.kt`、`feature/player/build.gradle.kts`、`app/build.gradle.kts`、
   `ui/settings/{SettingsScreen,SettingsViewModel}.kt`、
-  `AGENTS.md`、`TASKS.md`、`USAGE.md`、`docs/03-openlist-api.md`（新增 §8）。
+  `AGENTS.md`、`TASKS.md`、`USAGE.md`、`03-openlist-api.md`（新增 §8）。
 - 验证方式：
-  - `sh scripts/check.sh` → 自检通过（12 模块、Version Catalog、禁用项）
+  - `sh ../scripts/check.sh` → 自检通过（12 模块、Version Catalog、禁用项）
   - `./gradlew :app:assembleDebug :app:assembleRelease test` → **BUILD SUCCESSFUL**（7m23s），
     debug APK 18 MB、release APK 3.2 MB（R8 + lintVitalRelease + V2 签名均通过）
   - JVM 单测 **20 个测试类 / 173 个用例 / 0 失败**，新增 `MediaCachePolicyTest` 5 例
@@ -644,7 +644,7 @@
   （Factory 会 fallback 到默认 `CacheDataSink`），必须直接构造 `CacheDataSource` 并传
   `null` DataSink 才是只读模式。
 - 遗留问题：本机 `adb devices` 为空，**缓存命中效果未真机复验**，P3-04 因此标 `[?]`。
-- 给下一位：按 `docs/03` §8.4 的 adb 步骤复验三条（二次播放无「缓存未命中」日志、
+- 给下一位：按 `03-openlist-api.md` §8.4 的 adb 步骤复验三条（二次播放无「缓存未命中」日志、
   蜂窝下占用不涨但已缓存歌照常播、清理后归零），通过就把 `TASKS.md` 的 P3-04 改 `[x]`。
   别把缓存 key 换成 raw_url、别把 `CacheDataSource` 挪到 `ResolvingDataSource` 内层、
   别在 `PlaybackService.onDestroy` 里 `SimpleCache.release()`（服务会反复重建）。
@@ -654,34 +654,34 @@
 - 用户要求「评审现有 UI 设计并提出优化方案 / 删除无用部分」。
 - **评审结论**：Aurora Glass 实现本身成立（`Palette` 351 次 / `Shapes` 65 次真实引用、
   `glassSurface` 用 1dp 高光描边模拟玻璃而不开 `RenderEffect`、`GeneratedArtwork` 按 seed
-  哈希稳定复现），失效的是**围绕视觉的文档与资产**。`docs/07` v1.0 是重构前提案：§1 原则
+  哈希稳定复现），失效的是**围绕视觉的文档与资产**。`07-ui-design.md` v1.0 是重构前提案：§1 原则
   「无渐变装饰」与实现相反、§3.2 浅/深双主题 + 靛蓝 ↔ 恒定深色 + 极光紫、§3.4 圆角
   6/12/20 ↔ 11/18/30、§9.2 九条组件路径**无一存在**、§10 验收清单全空、§7 要求的横屏
-  三档断点从未实现。`preview/verify/` 里 `app8.png` / `player4.png` 是旧版灰方块视觉，
+  三档断点从未实现。`../preview/verify/` 里 `app8.png` / `player4.png` 是旧版灰方块视觉，
   `ui_check*.png` 才是当前版，混放会让下一位接手的人拿错参考。
 - **量化依据**：24 个 UI 文件 / 7,517 行；466 处硬编码 `X.dp` vs `Dim.*` 仅 48 次（9.7:1）；
   77 处硬编码 `Color(0x...)`；`Gradients` 5 个成员里 3 个零引用；`Dim.navHeight` 零引用
   而 `MsopApp` 写死 `62.dp`；触摸目标多处 < 48dp；47 处 `contentDescription` 里 18 处 null。
   结论是**颜色/形状令牌健康、只有尺寸令牌半失效**，方向不是重建令牌体系。
-- **删除**：`preview/verify/` 43 个文件 / 20.3 MB（未跟踪临时截图 + demo 音频）、
+- **删除**：`../preview/verify/` 43 个文件 / 20.3 MB（未跟踪临时截图 + demo 音频）、
   `docs/design/prototype.html` 58 KB、`Theme.kt` 的 `Gradients.teal/ember/coverScrim`、
-  `docs/07` 的 6 个失效章节（§3 旧视觉语言、§9.1/9.2 错误令牌与路径、§10 空清单、
+  `07-ui-design.md` 的 6 个失效章节（§3 旧视觉语言、§9.1/9.2 错误令牌与路径、§10 空清单、
   §11 差异汇总、§1 冲突原则）。
-- **保留并修正**：归档 `preview/baseline/{library,library_playing,player}.png` 三张当前视觉
-  基线；`preview/index.html` 留作历史溯源但加醒目警示条 + 改 title + 改误导性令牌注释；
-  `MsopApp.BottomNav` 的 `62.dp` → `Dim.navHeight`；`docs/07` 从 484 行重写为 v2.0
+- **保留并修正**：归档 `../preview/baseline/{library,library_playing,player}.png` 三张当前视觉
+  基线；`../preview/index.html` 留作历史溯源但加醒目警示条 + 改 title + 改误导性令牌注释；
+  `MsopApp.BottomNav` 的 `62.dp` → `Dim.navHeight`；`07-ui-design.md` 从 484 行重写为 v2.0
   「当前实现说明」（真实令牌表、组件表、7 条实测缺口、P1/P2 待办、验收建议）；同步
-  `AGENTS.md` §2/§13、`README.md`、`scripts/check.sh`、`TASKS.md` 变更记录。
+  `AGENTS.md` §2/§13、`README.md`、`../scripts/check.sh`、`TASKS.md` 变更记录。
 - **明确不动**：`ModuleMarker.kt`（`check.sh` 与契约依赖）、模块边界（契约已定 UI 不按
   feature 拆）、Aurora Glass 全部视觉实现（P1/P2 需真机定稿，本次只做 P0 清理）、
   本文档的历史记录（描述当时发生的事，不因现状修订）。
-- **验证**：`scripts/check.sh` 自检通过；`./gradlew :app:assembleDebug test` →
+- **验证**：`../scripts/check.sh` 自检通过；`./gradlew :app:assembleDebug test` →
   **BUILD SUCCESSFUL**（3m17s，592 tasks / 23 executed），debug APK 正常产出，
   `testDebugUnitTest` 与 `testReleaseUnitTest` 全绿。代码改动仅限 `Theme.kt`（删 3 个
   零引用成员）与 `MsopApp.kt`（令牌替换 + import），无视觉行为变化。
-- **给下一位**：改视觉后重截 `preview/baseline/` 三张，避免再出现新旧混放。P1 三项
+- **给下一位**：改视觉后重截 `../preview/baseline/` 三张，避免再出现新旧混放。P1 三项
   （横屏三档断点、云端为 0 时来源行收敛、播放页功能行定稿 4 项）需要设备确认后再动；
-  **别照 `docs/07` v1.0 的浅色/双栏规格写**——那份规格从未落地，v2.0 才是当前事实。
+  **别照 `07-ui-design.md` v1.0 的浅色/双栏规格写**——那份规格从未落地，v2.0 才是当前事实。
 
 ---
 
@@ -694,13 +694,13 @@
      明确不做 40 语言、主题/深浅色、个人资料、推荐、更新检查、启动向导、APE、
      经典播放页、登录 streak。
   2. 定下「只借鉴功能、不复制 GPL 代码」的独立重写原则；msop 保持现有许可。
-  3. 新建 `docs/08-shuyin-integration.md` 作为 P7 唯一计划与进度看板（12 项任务、
+  3. 新建 `08-shuyin-integration.md` 作为 P7 唯一计划与进度看板（12 项任务、
      验收标准、依赖预研、libFLAC 阻塞说明）。
   4. `AGENTS.md` 硬约束第 2 条改为允许本机 + OpenList + WebDAV 三种音源；
      新增 D21（WebDAV 第三音源口径）与 D22（独立重写）。
   5. `TASKS.md` 新增 P7 十二项，总任务 38 → 50，P3-05 并入 P7-07。
-- 改了哪些文件：`docs/08-shuyin-integration.md`（新增）、`AGENTS.md`、`TASKS.md`、
-  `docs/05-progress.md`。
+- 改了哪些文件：`08-shuyin-integration.md`（新增）、`AGENTS.md`、`TASKS.md`、
+  `05-progress.md`。
 - 技术预研结论：
   - Haze 在 Maven Central 有 1.7.3 / 2.1.0，可加；
   - `androidx.media3:media3-decoder-flac` **未发布**（Google Maven group-index 无此
@@ -708,11 +708,11 @@
   - 本机 SDK **没有 NDK / CMake**，P7-12 标 `[!]` 阻塞，待前 11 项完成后再处理；
   - dav4jvm 仓库坐标待确认（JitPack metadata 401），必要时按 AGENTS D4 允许的最小
     PROPFIND + Range 客户端实现。
-- 验证方式：文档一致性检查（`scripts/check.sh` 后续补跑）；本轮未改业务代码。
+- 验证方式：文档一致性检查（`../scripts/check.sh` 后续补跑）；本轮未改业务代码。
 - 遗留问题：P7-01 播放页进度条回归需先在真机上用 `uiautomator dump` 确认真实坐标再修；
   之前几次点击可能落在封面区，不能仅凭截图目测判定。
 - 给下一位：**P7 的顺序不要改**——先修 P7-01，再做数据/播放能力，最后做重 UI 与
-  libFLAC。每完成一项先更新 `docs/08` 看板，再改 `TASKS.md` 与本文档，不要攒到最后。
+  libFLAC。每完成一项先更新 `08-shuyin-integration.md` 看板，再改 `TASKS.md` 与本文档，不要攒到最后。
 
 ### 2026-11-14 · P7-01 · 播放页进度条回归修复（代码完成，真机待验）
 
@@ -876,7 +876,7 @@
 ### 2026-11-14 · P7-08 桌面悬浮歌词完成 + 四项真机复验
 
 - 背景：接手时 `app/desktop/`、`ui/settings/DesktopLyrics*.kt` 已有未跟踪代码，
-  `AndroidManifest.xml` / `SettingsScreen.kt` 也已接入，但 `docs/08` 看板还是 `[ ]`、
+  `AndroidManifest.xml` / `SettingsScreen.kt` 也已接入，但 `08-shuyin-integration.md` 看板还是 `[ ]`、
   `TASKS.md` / `AGENTS.md` 未同步。本轮核实代码完整后做编译、单测与真机验收，并补齐记录。
 - 做了什么：
   1. P7-08 实现定稿：前台服务（`specialUse` + 独立通知渠道 + `START_NOT_STICKY`）、
@@ -885,7 +885,7 @@
      `SYSTEM_ALERT_WINDOW` 授权页与 `ON_RESUME` 复核、暂停 10 分钟隐藏。
   2. 真机（PGEM10 / Android 15 / 900×1600）复验 P7-01、P7-02、P7-05、P7-06、P7-08。
 - 改了哪些文件：**本轮未改业务代码**；更新 `AGENTS.md`（§0/§2/§8）、`TASKS.md`
-  （P7 五行转 `[x]` + 总览 + 变更记录）、`docs/08`（看板 + §5 两条完成记录）、
+  （P7 五行转 `[x]` + 总览 + 变更记录）、`08-shuyin-integration.md`（看板 + §5 两条完成记录）、
   本文件。设备上新增测试素材 `/sdcard/Music/PrimuseTest/primuse-flac-test.ttml`。
 - 验证方式：
   - `.\gradlew.bat :app:compileDebugKotlin test :app:assembleDebug --no-daemon`
@@ -905,19 +905,19 @@
 - 遗留问题：P7-03 / P7-04 / P7-07 / P3-04 仍需远程音源、真实 WebDAV 服务器或 SAF 全流程；
   当前设备 509 首全为 LOCAL，OpenList 与 WebDAV 均未配置，保持 `[?]`。
   P7-08 的「暂停 10 分钟自动隐藏」未计时实测（代码为 `delay(10min)` 后置 `GONE`）。
-- 验收截图归档在 `preview/verification/`：`p7-01-seek-bar.png`、`p7-05-ttml-word-highlight.png`、
+- 验收截图归档在 `../preview/verification/`：`p7-01-seek-bar.png`、`p7-05-ttml-word-highlight.png`、
   `p7-06-audio-quality.png`、`p7-08-desktop-lyrics.png`（均取自 PGEM10 / Android 15 实机）。
 - 给下一位：真机 lyric 列表会跟随当前行滚动，**点歌词行验证 seek 前必须重新 dump 坐标**，
   否则会点到别的行（本轮第一次点第三行得到 70s 就是这个原因，不是解析 bug）。
   桌面歌词设置里的坐标会随页面滚动变化，脚本化验收要每次 `uiautomator dump`。
-  下一步按 `docs/08` 做 P7-09 Haze；`TASKS.md` 把 P7-09 标成依赖 P7-11、
-  `docs/08` 却把 P7-09 排在最前，动手前先统一这个顺序矛盾。
+  下一步按 `08-shuyin-integration.md` 做 P7-09 Haze；`TASKS.md` 把 P7-09 标成依赖 P7-11、
+  `08-shuyin-integration.md` 却把 P7-09 排在最前，动手前先统一这个顺序矛盾。
 
 
 ### 2026-11-14 · P7-09 Haze 标题栏毛玻璃（完成 + 真机验收）
 
 - 背景：接手时 Haze 2.1.0 依赖与 `HazeTitle.kt`（稳定 Box 源捕获 + Backdrop 修正版）已存在，
-  曲库/搜索/设置三页已接入，但 `docs/08` 看板仍是 `[ ]`、遗留 `HazeLogger.enabled = true`
+  曲库/搜索/设置三页已接入，但 `08-shuyin-integration.md` 看板仍是 `[ ]`、遗留 `HazeLogger.enabled = true`
   调试开关，`gfxinfo` 采样 0 帧（性能测量中断）。
 - 做了什么：
   1. `ScreenTitle` 加 `leading` 槽、`HazeTitleScaffold` 加 `onBack` 参数——二级页标题栏获得
@@ -933,14 +933,14 @@
 - 验证方式：`compileDebugKotlin` + `test` + `assembleDebug` 全绿（27 类 224 用例 0 失败）；
   真机 PGEM10：设置页/专辑详情滚动中标题栏模糊轮廓可见、文字清晰无渲染异常；歌单全流程
   （新建→详情→选歌→添加 2 首→返回→删除）走通，标题栏返回/添加/更多按钮可点；测试歌单
-  已删净。截图归档 `preview/verification/p7-09-*.png`。
+  已删净。截图归档 `../preview/verification/p7-09-*.png`。
 - 遗留问题：「滚动 ≥50fps」验收线受云真机上限约束（系统应用自身 ≈47fps），已按边际开销
   记录；API 30 纯色降级仅代码路径验证（本机无 API 30 设备/模拟器）；曲库页滚动模糊证据
   取自上一会话 524 首时期截图，当前设备仅 7 首无法滚动复测。
 - 给下一位：踩过的两个坑——① 编辑器对 import 块做模糊匹配，删 import 时会把中间的相邻行
   一起吞掉（本轮 Row/Spacer 被吞导致 12 个编译错），改 import 后必须重新编译核对；
   ② `hazeSource` 不能挂在 AnimatedContent 上（捕获层不刷新），必须挂在稳定 Box 上。
-  下一步 P7-10 液态玻璃导航（自绘，不引新依赖，见 `docs/08` §2）。
+  下一步 P7-10 液态玻璃导航（自绘，不引新依赖，见 `08-shuyin-integration.md` §2）。
 
 > AI生成
 
@@ -993,7 +993,7 @@
 - 验证方式：compileDebugKotlin / test / assembleDebug / assembleRelease 全绿（27 类 224 用例
   0 失败）；真机：专辑详情转场中帧两次可见缩放+滑入、稳定帧干净；歌单列表/详情/选歌页、
   OpenList 子页稳定帧干净；返回键单步验证四条链路（专辑→网格、详情→列表、列表→曲库、
-  子页→设置主页）；连点 ×4 存活。截图归档 `preview/verification/p7-11-*.png`。
+  子页→设置主页）；连点 ×4 存活。截图归档 `../preview/verification/p7-11-*.png`。
 - 给下一位：P7 视觉三连（09/10/11）全部收官。剩余 P7-03/04/07 + P3-04 均需远程资源或
   真实 WebDAV 服务器；P7-12 需 NDK。可选 P5-04 / P6-01。
 
@@ -1061,15 +1061,15 @@
   口径一致）；debug 18.6 MB / release 3.3 MB；真机 debug 包逐项验收如上；
   **release（R8）包装机复验**：磨砂存活、封面/轮播正常、默认深色回落正确——
   Kyant0 Backdrop 无 ServiceLoader 风险，与 Haze 同口径；验收后设备已恢复 debug 包。
-  截图归档 `.temp/uiv-01…13`（会话临时件，未入 `preview/verification/`）。
+  截图归档 `.temp/uiv-01…13`（会话临时件，未入 `../preview/verification/`）。
 - 遗留与口径：
   - 横屏播放页未在本轮专项复验（P4-04 历史遗留口径不变）；
   - 歌词页验收的是 LRC 行级样式，逐字高亮依赖 TTML 源（P7-05 已验）；
-  - 主题范围变更：`docs/08` §1 原「明确不做深浅色」被用户 2026-11-14 明确要求推翻
-    （两档、默认深色、不跟随系统），边界修订已同步记入 `docs/08` §0/§1 与
+  - 主题范围变更：`08-shuyin-integration.md` §1 原「明确不做深浅色」被用户 2026-11-14 明确要求推翻
+    （两档、默认深色、不跟随系统），边界修订已同步记入 `08-shuyin-integration.md` §0/§1 与
     `AGENTS.md` D23/D24。
 - 给下一位：P7 剩余项与外部资源依赖不变（P7-03/04/07、P3-04、P7-12 NDK 阻塞；
-  可选 P5-04 / P6-01）。改 UI 前先读 `docs/07` v2.0 与 `docs/08` §5 的两轮视觉记录。
+  可选 P5-04 / P6-01）。改 UI 前先读 `07-ui-design.md` v2.0 与 `08-shuyin-integration.md` §5 的两轮视觉记录。
 
 ### 2026-11-14 · HOTFIX · 修复启动闪退（标题栏 Backdrop 自引用）与磨砂回归
 - 做了什么：21:50 装上的 debug 包启动即崩。tombstone 显示 `RenderThread` SIGSEGV、
@@ -1085,8 +1085,8 @@
   LayerBackdrop、源挂内容 Box」：不崩但与外层共享 backdrop 嵌套后采样为空、文字透出，
   已弃用，原因写进代码注释防止复发。
 - 改了哪些文件：`app/src/main/java/com/msop/player/ui/components/HazeTitle.kt`（唯一代码改动）；
-  `AGENTS.md` / `TASKS.md` / `docs/05-progress.md`（记录）；新增验证截图
-  `preview/verification/2026-11-14-crash-fix.png`（静止）与 `...-scrolled.png`（滚动后磨砂）。
+  `AGENTS.md` / `TASKS.md` / `05-progress.md`（记录）；新增验证截图
+  `../preview/verification/2026-11-14-crash-fix.png`（静止）与 `...-scrolled.png`（滚动后磨砂）。
 - 验证方式：`./gradlew.bat :app:assembleDebug :app:testDebugUnitTest` 与全量
   `./gradlew.bat test` 均 BUILD SUCCESSFUL（按类名去重 27 类 / 224 用例 / 0 失败）；
   设备 `127.0.0.1:5555` 装新 debug 包后连续 3 次 `am force-stop` + 冷启动均拿到存活 PID
@@ -1121,7 +1121,7 @@
 - 改了哪些文件：`app/src/main/java/com/msop/player/ui/player/PlayerSheet.kt`（手势 +
   `offset` + `clipToBounds`）、`app/src/main/java/com/msop/player/ui/MsopApp.kt`（删实底）；
   `AGENTS.md` / `TASKS.md` / 本文件（记录）；新增验证截图
-  `preview/verification/2026-11-15-player-drag-dark.png`、`...-drag-light.png`、
+  `../preview/verification/2026-11-15-player-drag-dark.png`、`...-drag-light.png`、
   `...-swipeup-noop.png`。
 - 验证方式：`./gradlew.bat :app:assembleDebug` BUILD SUCCESSFUL，装真机
   （PGEM10 / Android 15 / 900×1600，`adb -s 127.0.0.1:5555`）逐条实测：
@@ -1173,7 +1173,7 @@
 - 验证方式：`:app:assembleDebug` BUILD SUCCESSFUL；真机 PGEM10 / Android 15（900×1600，
   density 2.0）逐条实测：① 底部左右键位与图标正确（顺序在左、爱心在右且无圆圈）；
   ② 点顺序 → 扇形展开 随机/循环/单曲三项，无重叠、不压播放键（截图
-  `preview/verification/2026-11-15-mode-fan.png`）；③ 选「随机」→ 菜单关闭、左下图标变
+  `../preview/verification/2026-11-15-mode-fan.png`）；③ 选「随机」→ 菜单关闭、左下图标变
   随机且变蓝，再点开菜单只剩 顺序/循环/单曲（`...-mode-fan-exclude-current.png`）；
   ④ 播放中顶栏显示「● 正在播放」青点，暂停显示「已暂停」灰点（`...-player-status.png`）；
   ⑤ 队列长按手柄拖两行 → 表头实时显示「移到 4」、整行跟手且不透明浮起
@@ -1248,7 +1248,7 @@
   （ShuYin、OuterTune、BetterLyrics 等）列为「只借鉴形态、禁止复制代码/资源」。
 - 已解除的位置（全部改为「标注来源与许可证即可直接采用」）：
   `AGENTS.md` §0 第 7 条、§3 硬约束第 4 条、决策表 D22（划线标已解除）/ D24 / D25，
-  新增 **D26**；`TASKS.md` P7 与总览两处原则注；`docs/08` §0 边界第 1、3 条。
+  新增 **D26**；`TASKS.md` P7 与总览两处原则注；`08-shuyin-integration.md` §0 边界第 1、3 条。
 - 历史进度条目不追溯改写（当时确为独立重写，属事实）；只在当前规则处标注解除。
 - **待办**：仓库根目录目前**没有 LICENSE 文件**。GitHub 仓库虽公开，但「公开」不等于
   「有开源许可证」；若后续真的引入 GPL-3.0 代码，需补 GPL-3.0 LICENSE 并保留第三方
@@ -1278,9 +1278,9 @@
      （旧备份缺字段仍可反序列化），`BackupManager` 导出写入、导入直接恢复，
      结果文案去掉「密码需重新输入」。旧备份 password 为空时回退保留本机已有密码。
 - **只出预览、未动代码（2 项，等确认）**：
-  - `preview/icons-redesign.html`：15 个现有图标（不是 16 个，之前口误）旧 vs 新 SVG 对照 +
+  - `../preview/icons-redesign.html`：15 个现有图标（不是 16 个，之前口误）旧 vs 新 SVG 对照 +
     1 个新增 `Library` 图标建议，标注使用位置与问题；确认后才替换 `PlayerIcons.kt`。
-  - `preview/lyrics-redesign.html`：BetterLyrics 风格纯歌词页，竖屏 390×694 / 横屏 694×390
+  - `../preview/lyrics-redesign.html`：BetterLyrics 风格纯歌词页，竖屏 390×694 / 横屏 694×390
     两版；逐字高亮 + 拖尾光晕 + 远处透视淡出 + 取色流体背景；右上横屏按钮；
     迷你控制条 3 秒自动隐藏；横屏控制条 `left 24dp / width 232dp` 与左侧封面左边缘对齐。
     确认后才写 Compose（旧的 `LyricsPane` 是否整块删、`HorizontalPager` 是否保留一并待定）。
@@ -1294,7 +1294,7 @@
   Shuffle / Repeat / RepeatOne / Folder / Timer / Pause / SkipNext / SkipPrevious），
   统一 1.9 描边、圆角端点；**Lyrics / Order / Cloud / DragHandle 保持原样**（用户指定），
   **新增 Library 图标被否决**（音乐库导航继续使用 Disc）。新增 `PathBuilder.rect()` 辅助，
-  `dot()` 同时用于空心圆（stroke 块）。`preview/icons-redesign.html` 同步为最终对照（15 行）。
+  `dot()` 同时用于空心圆（stroke 块）。`../preview/icons-redesign.html` 同步为最终对照（15 行）。
 - **歌词页（用户 14:07 指令）**：「直接移植我另一个项目 music-web-cf-main 全屏歌词」
   +「歌词原始界面顶部那些都不要了，需要的是纯净歌词界面」。
   参考包内 `index.html` 的 `.m2l-fs`（用户自有项目，D26 起无许可限制）。
@@ -1322,7 +1322,7 @@
   有 16 行歌词 +「切换横屏」+ 上一首/暂停/下一首；**3.5 秒后工具条与三个按钮一起消失**、
   歌词仍在（17 行）；横屏 `rotation=1` 时左侧歌名/歌手、右侧歌词、右上「返回竖屏」、
   迷你条悬浮（上一轮已验，本轮布局代码未变）。
-- 两份预览 `preview/icons-redesign.html` / `preview/lyrics-redesign.html` 已同步到最终实现。
+- 两份预览 `../preview/icons-redesign.html` / `../preview/lyrics-redesign.html` 已同步到最终实现。
 
 ### 2026-11-15 · 文件夹详情雾感修复 + 歌词页照抄 Primuse
 
@@ -1540,7 +1540,7 @@
 已知 / 未做：横屏歌词列左边界当前 ≈37.4% 屏宽（目标图 ≈43%，偏差来自 web 的
 `max-width:13em; margin:auto` 在 Compose 里按列宽折算）；`Collapse` 钮竖屏＝回封面页、横屏＝
 收起播放页，语义不完全统一；release（R8）包本轮没打；git 未提交。
-截图归档：`preview/verification/2026-11-15-r7-*.png`（9 张）。
+截图归档：`../preview/verification/2026-11-15-r7-*.png`（9 张）。
 ### 2026-11-15 · 第八轮需求（删全屏钮 / 横屏藏状态栏 / 工具条与迷你条改悬浮 / 竖屏逐字靠左）
 
 用户看完第七轮真机截图后四条指令：
@@ -1568,7 +1568,7 @@
 - 深色横屏复验一次（浮层与玻璃卡正常）；从横屏点横屏钮回竖屏后**状态栏恢复**，
   主题验完切回用户原来的**浅色**。
 - 构建：`:app:compileDebugKotlin`、`:app:assembleDebug` BUILD SUCCESSFUL。
-- 截图归档：`preview/verification/2026-11-15-r8-*.png`（3 张）。
+- 截图归档：`../preview/verification/2026-11-15-r8-*.png`（3 张）。
 
 已知 / 未做：`PlayerIcons.Collapse` 图标本身留在 `PlayerIcons.kt`（当前无引用，留着备用）；
 release（R8）包仍未打；git 未提交。
@@ -1662,7 +1662,7 @@ release（R8）包仍未打；git 未提交。
   （18 首增量扫 0.1 秒，「正在扫描…」态来不及截图，代码路径与完成态同一条。）
 - 构建：`:app:compileDebugKotlin`、`:app:assembleDebug` BUILD SUCCESSFUL（19,997,230 字节流式装机）；
   `test`（debug + release 双变体）28 类 235 例 0 失败。
-- 截图归档：`preview/verification/2026-11-15-r9-*.png`（8 张）。
+- 截图归档：`../preview/verification/2026-11-15-r9-*.png`（8 张）。
 
 已知 / 未做：竖屏浮层工具条压在顶部第一条（最暗的那行）歌词上，是 web 的表现，未额外避让；
 「播放列表」入口从右上角菜单移除后，歌单只能从 Tab 进入（用户原意若是「菜单项保留」，需回补一项）；
@@ -1737,7 +1737,7 @@ release（R8）包仍未打；git 未提交。
      先按 ID3v2 synchsafe 跳标签再判格式，覆盖「.mp3 实为 FLAC」）。两个 Syncer 在 upsert 前
      把旧 `durationMs>0` 合并回新 Track（用 `TrackDao.bySource(source)` 取旧值），否则复同步会
      被 `durationMs=0` 覆盖。实测 OPENLIST 时长 **83/83**。
-  4. **koyeb 走 OpenSubsonic apiKey**：`olmp_fi9…`（完整 key 不入库，本地备份在 `archive/` 之外的密码管理器），
+  4. **koyeb 走 OpenSubsonic apiKey**：`olmp_fi9…`（完整 key 不入库，本地备份在 `../archive/` 之外的密码管理器），
      REST 前缀 `/@rest`，补艺术家/专辑/封面；该机索引只覆盖 `/od-20200439/musicweb` 的 23 首，
      `covers` 只报到 11 首（覆盖不均属服务端索引所限）。
   5. **歌单体系补全**（Room 升 v4，`MIGRATION_3_4` 非 destructive）：`playlists` 加

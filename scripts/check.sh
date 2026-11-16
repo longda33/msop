@@ -76,7 +76,7 @@ echo "== 6. UI 代码状态 =="
 ui=$(find app/src/main -path '*/ui/*' -name '*.kt' 2>/dev/null | wc -l)
 feature_ui=$(find feature -path '*/ui/*' -name '*.kt' 2>/dev/null | wc -l)
 if [ "$ui" -gt 0 ]; then
-    ok "app/ui 下已有 $ui 个界面文件（UI 已落地，见 docs/07 与 preview/baseline/）"
+    ok "app/ui 下已有 $ui 个界面文件（UI 已落地，见 docs/07-ui-design.md 与 preview/baseline/）"
 else
     ok "app/ui 下无界面代码（UI 未落地）"
 fi
@@ -86,7 +86,7 @@ fi
 
 echo
 if [ "$fail" -eq 0 ]; then
-    echo "自检通过。下一步：按 BUILD-NOTES.md 跑 ./gradlew :app:assembleDebug"
+    echo "自检通过。下一步：按 docs/BUILD-NOTES.md 跑 ./gradlew :app:assembleDebug"
     exit 0
 else
     echo "自检失败 $fail 项，先修再继续。"

@@ -77,7 +77,7 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 | 艺术家 / 专辑 / 封面 | **Subsonic**（`/@rest/search3`、`/@rest/getCoverArt`，`apiKey` 鉴权） | 填了应用密钥才启用；失败只降级、不影响播放 |
 
 Subsonic 的 `stream` 接口会 302 跳到 `http://` 明文直链，被 App 的禁明文策略拦掉，
-所以**流播不用它**。完整实测记录见 `docs/03-openlist-api.md` §6（原生 REST）与 §7（Subsonic）。
+所以**流播不用它**。完整实测记录见 `03-openlist-api.md` §6（原生 REST）与 §7（Subsonic）。
 
 - 数据库里存的是稳定的 `openlist:/路径`，**不存播放直链**——直链带有时效签名，
   每次起播（包括拖动进度条后重新打开数据源）都会重新取一条新的。
@@ -179,7 +179,7 @@ Subsonic 的 `stream` 接口会 302 跳到 `http://` 明文直链，被 App 的�
 build-tools 37.0.0）、`local.properties` 里填 `sdk.dir`。
 
 ```bash
-sh scripts/check.sh                 # 不依赖 JDK 的完整性自检
+sh ../scripts/check.sh                 # 不依赖 JDK 的完整性自检
 ./gradlew.bat test                   # 全部 JVM 单测
 ./gradlew.bat :app:assembleDebug
 ./gradlew.bat :app:assembleRelease   # R8 + 自签名
@@ -215,6 +215,6 @@ keytool -genkeypair -v -keystore app/release.jks -alias msop \
 - 1 万首以上大库的滚动性能基准（当前 500 首量级已真机验证）。
 - 删除音频文件内标签后同步不过来（为了不让重扫抹掉补出来的元数据，合并不覆盖旧值）。
 
-任务清单与验收标准见 `TASKS.md`，历史踩坑见 `docs/05-progress.md`。
+任务清单与验收标准见 `TASKS.md`，历史踩坑见 `05-progress.md`。
 
 > AI生成
