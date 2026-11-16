@@ -23,6 +23,9 @@ fun Track.mergedWith(metadata: TrackMetadata): Track {
         trackNo = trackNo ?: metadata.trackNo,
         discNo = discNo ?: metadata.discNo,
         durationMs = if (durationMs > 0L) durationMs else metadata.durationMs,
+        bitrateKbps = bitrateKbps ?: metadata.bitrateKbps,
+        sampleRateHz = sampleRateHz ?: metadata.sampleRateHz,
+        bitDepth = bitDepth ?: metadata.bitDepth,
     )
 }
 

@@ -14,6 +14,9 @@ class RoomMetadataStore(
     override suspend fun tracksNeedingMetadata(limit: Int): List<Track> =
         dao.needingMetadata(SourceType.LOCAL, limit).map { it.toTrack() }
 
+    override suspend fun tracksNeedingQuality(limit: Int): List<Track> =
+        dao.needingQuality(SourceType.LOCAL, limit).map { it.toTrack() }
+
     override suspend fun tracksMissingCover(limit: Int): List<Track> =
         dao.missingCover(SourceType.LOCAL, limit).map { it.toTrack() }
 
@@ -26,4 +29,11 @@ class RoomMetadataStore(
 
     override suspend fun referencedCovers(): Set<String> =
         dao.coverUris(SourceType.LOCAL).toHashSet()
+
+    override suspend fun tracksWithCover(limit: Int): List<Track> =
+        dao.withCover(SourceType.LOCAL, limit).map { it.toTrack() }
+
+    override suspend fun clearCover(ids: List<String>) {
+        if (ids.isNotEmpty()) dao.clearCover(ids)
+    }
 }

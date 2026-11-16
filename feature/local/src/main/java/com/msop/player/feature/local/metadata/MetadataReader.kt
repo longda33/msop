@@ -20,6 +20,9 @@ interface MetadataReader {
     /** 读取标签。文件损坏/格式不支持/URI 无权访问时返回 null，不抛异常。 */
     suspend fun readTags(uri: String): TrackMetadata?
 
+    /** 只读码率/采样率/位深，给已有标签的媒体库曲目补音质信息。 */
+    suspend fun readQuality(uri: String): AudioQuality? = null
+
     /** 读取内嵌封面原始字节（未解码）。没有封面返回 null。 */
     suspend fun readCover(uri: String): ByteArray?
 }
@@ -36,8 +39,10 @@ class AndroidMetadataReader(
     private val io: CoroutineDispatcher = Dispatchers.IO,
 ) : MetadataReader {
 
+    private val qualityReader = AudioQualityReader(context)
+
     override suspend fun readTags(uri: String): TrackMetadata? = withContext(io) {
-        withRetriever(uri) { retriever ->
+        val tags = withRetriever(uri) { retriever ->
             TrackMetadata(
                 title = MetadataValues.clean(retriever.metadata(MediaMetadataRetriever.METADATA_KEY_TITLE)),
                 artist = MetadataValues.clean(retriever.metadata(MediaMetadataRetriever.METADATA_KEY_ARTIST)),
@@ -54,6 +59,19 @@ class AndroidMetadataReader(
                 ),
             )
         }
+        // 标签读不到（例如纯 WAV）不代表音质读不到；两个都空才算失败。
+        val quality = qualityReader.read(uri)
+        if (tags == null && quality == null) return@withContext null
+
+        (tags ?: TrackMetadata()).copy(
+            bitrateKbps = quality?.bitrateKbps,
+            sampleRateHz = quality?.sampleRateHz,
+            bitDepth = quality?.bitDepth,
+        )
+    }
+
+    override suspend fun readQuality(uri: String): AudioQuality? = withContext(io) {
+        qualityReader.read(uri)
     }
 
     override suspend fun readCover(uri: String): ByteArray? = withContext(io) {

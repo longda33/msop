@@ -141,6 +141,58 @@ class LrcParserTest {
         assertFalse(LrcParser.parse("").indexAt(1_000) >= 0)
     }
 
+    // ---------------------------------------------------------------- 方括号逐字
+    // 2026-11-16 BUGFIX：酷狗/QQ 的「逐字 LRC」每个字自带一个 [mm:ss.xx]，
+    // 旧实现把每个标签都当一行、文本取整句 → 同一句被复制 20 次（用户报的重复行）。
+
+    @Test
+    fun `方括号逐字整行合成一行而不是复制多行`() {
+        val raw = "[01:44.23]哭[01:44.55]着[01:44.72]说[01:45.21]欠[01:45.60]我[01:45.81]的"
+
+        val lyrics = LrcParser.parse(raw)
+
+        assertEquals(1, lyrics.lines.size)
+        assertEquals("哭着说欠我的", lyrics.lines[0].text)
+        assertEquals(104_230L, lyrics.lines[0].timeMs)
+        assertEquals(6, lyrics.lines[0].words.size)
+        assertEquals("哭", lyrics.lines[0].words.first().text)
+        assertEquals(104_550L, lyrics.lines[0].words[1].timeMs)
+        // 中文逐字之间不能插空格，否则一个字一段、整行被撑开
+        assertEquals("", lyrics.lines[0].wordJoiner)
+    }
+
+    @Test
+    fun `多行逐字歌词每句只出现一次`() {
+        val raw = """
+            [00:23.45]还[00:23.79]记[00:24.08]得
+            [00:25.60]陪[00:26.07]一[00:26.15]个
+            [00:28.74]青[00:29.04]春[00:29.28]来
+        """.trimIndent()
+
+        val lyrics = LrcParser.parse(raw)
+
+        assertEquals(3, lyrics.lines.size)
+        assertEquals(listOf("还记得", "陪一个", "青春来"), lyrics.lines.map { it.text })
+    }
+
+    @Test
+    fun `行首多个方括号仍是同一句的多个时间点`() {
+        // 方括号之间没有文字 → 副歌复用，仍要拆成多行（这是正常语义，不是重复 bug）
+        val lyrics = LrcParser.parse("[00:10.00][00:20.00]副歌")
+
+        assertEquals(2, lyrics.lines.size)
+        assertEquals(listOf("副歌", "副歌"), lyrics.lines.map { it.text })
+        assertEquals(listOf(10_000L, 20_000L), lyrics.lines.map { it.timeMs })
+        assertTrue(lyrics.lines[0].words.isEmpty())
+    }
+
+    @Test
+    fun `方括号逐字的文字拼接保留原始空格`() {
+        val lyrics = LrcParser.parse("[00:09.61]吉[00:09.75]他[00:09.88]：[00:10.01]老[00:10.14]田")
+
+        assertEquals("吉他：老田", lyrics.lines[0].text)
+    }
+
     @Test
     fun `逐字标签解析为 words`() {
         val lyrics = LrcParser.parse("[00:12.00]<00:12.00>被 <00:13.50>命 <00:15.00>中")

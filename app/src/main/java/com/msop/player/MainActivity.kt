@@ -11,12 +11,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.msop.player.core.datastore.ThemePreferences
 import com.msop.player.feature.local.saf.SafDirectoryStore
 import com.msop.player.feature.local.work.LocalScanScheduler
 import com.msop.player.ui.MsopApp
 import com.msop.player.ui.library.LibraryViewModel
 import com.msop.player.ui.permission.AudioPermissionGate
 import com.msop.player.ui.theme.MsopTheme
+import com.msop.player.ui.theme.ThemeMode
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -29,6 +31,9 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var safDirectories: SafDirectoryStore
 
+    @Inject
+    lateinit var themePreferences: ThemePreferences
+
     /** 保证每个 Activity 实例只触发一次扫描，避免每次回前台都重扫。 */
     private var scanTriggered = false
 
@@ -37,7 +42,21 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setContent {
-            MsopTheme {
+            // 2026-11-14 深浅色（仅两档，默认深色）：状态放在 setContent 根，
+            // 设置页改主题后回调刷新，立即全局生效。不读“跟随系统”。
+            var themeMode by remember {
+                mutableStateOf(
+                    themePreferences.themeModeName
+                        ?.let { stored -> ThemeMode.entries.firstOrNull { it.name == stored } }
+                        ?: ThemeMode.DARK,
+                )
+            }
+            val onThemeChange: (ThemeMode) -> Unit = { mode ->
+                themeMode = mode
+                themePreferences.setThemeModeName(mode.name)
+            }
+
+            MsopTheme(themeMode = themeMode) {
                 AudioPermissionGate(
                     onGranted = {
                         if (!scanTriggered) {
@@ -52,6 +71,8 @@ class MainActivity : ComponentActivity() {
                     MsopApp(
                         viewModel = viewModel,
                         directories = directories,
+                        themeMode = themeMode,
+                        onThemeChange = onThemeChange,
                         onRescan = { scanScheduler.enqueue(full = true) },
                         onDirectoryPicked = { uri ->
                             safDirectories.add(uri.toString())

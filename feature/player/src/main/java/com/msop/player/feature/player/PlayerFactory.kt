@@ -12,8 +12,13 @@ import androidx.media3.exoplayer.audio.AudioOffloadSupport
 import androidx.media3.exoplayer.audio.AudioTrackAudioOutputProvider
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import com.msop.player.core.common.log.AppLog
 import com.msop.player.core.network.ServerUrl
 import com.msop.player.core.network.StreamUrlResolver
+import com.msop.player.core.network.WebDavUrl
+import com.msop.player.feature.player.cache.MediaCache
+import com.msop.player.feature.player.cache.MediaCachePolicy
+import com.msop.player.feature.player.cache.RemoteCacheDataSourceFactory
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -35,17 +40,27 @@ import javax.inject.Singleton
  * [ResolvingDataSource] 是 P3 的接缝：数据库里存的是稳定的 `openlist:/路径`，
  * 每次起播（含 seek 后重新打开）才去 `/api/fs/get` 换一条带 tempauth 的新鲜直链。
  * 绝不能把 raw_url 存库——实测它的签名有时效，过期整个曲库都会播不了。
+ *
+ * **P3-04**：上面这条接缝现在被包在 `CacheDataSource` 里，只有缓存未命中时才会
+ * 走到 resolve。缓存 key 用稳定的 `openlist:/路径`，因此二次播放（含 seek 到已
+ * 缓存区间）不会重复换直链，也不会因为 tempauth 变化而产生多份缓存。
+ * 本地曲目不进缓存。详见 `RemoteCacheDataSourceFactory` 的说明。
  */
 @Singleton
 class PlayerFactory @Inject constructor(
     @ApplicationContext private val context: Context,
     private val streamResolver: StreamUrlResolver,
+    private val mediaCache: MediaCache,
+    private val cachePolicy: MediaCachePolicy,
 ) {
 
     fun create(): ExoPlayer {
-        val dataSourceFactory = ResolvingDataSource.Factory(
-            DefaultDataSource.Factory(context),
-            ResolvingDataSource.Resolver { dataSpec -> resolveRemote(dataSpec) },
+        val plainFactory = DefaultDataSource.Factory(context)
+        val dataSourceFactory = RemoteCacheDataSourceFactory(
+            plainFactory = plainFactory,
+            resolver = ResolvingDataSource.Resolver { dataSpec -> resolveRemote(dataSpec) },
+            mediaCache = mediaCache,
+            policy = cachePolicy,
         )
 
         // 上报「设备不支持 offload」，ExoPlayer 就不会走 DSP 直通路径。
@@ -67,12 +82,24 @@ class PlayerFactory @Inject constructor(
             .build()
     }
 
-    /** 本地 `content://` 原样放行；远程换成新鲜直链。同步网络请求在 DataSource 线程执行。 */
+    /**
+     * 本地 `content://` 原样放行；远程换成可播放地址。同步网络请求在 DataSource 线程执行。
+     * P3-04 之后这里只在**缓存未命中**时被调用，命中时连一次 API 请求都不发。
+     *
+     * OpenList 每次换一条带 tempauth 的直链；WebDAV 只是拼 URL + Basic Auth 头，
+     * 两者都通过 [StreamUrlResolver] 收口，播放层不区分具体音源。
+     */
     private fun resolveRemote(dataSpec: DataSpec): DataSpec {
         val uri = dataSpec.uri.toString()
-        if (!uri.startsWith(ServerUrl.SCHEME)) return dataSpec
+        if (!uri.startsWith(ServerUrl.SCHEME) && !uri.startsWith(WebDavUrl.SCHEME)) return dataSpec
+        // 可观测性：二次播放若命中缓存，这一行不会出现（连解析都不用做）。
+        // 真机复验用 `adb logcat -s Msop:V | grep 缓存未命中` 对比第一次与第二次播放。
+        AppLog.d("远程缓存未命中，解析播放地址 uri=$uri")
         val fresh = streamResolver.resolve(uri)
-        return dataSpec.buildUpon().setUri(Uri.parse(fresh)).build()
+        return dataSpec.buildUpon()
+            .setUri(Uri.parse(fresh))
+            .setHttpRequestHeaders(streamResolver.headers(uri))
+            .build()
     }
 
     private companion object {

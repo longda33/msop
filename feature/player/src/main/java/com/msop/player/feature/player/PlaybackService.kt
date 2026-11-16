@@ -3,6 +3,7 @@ package com.msop.player.feature.player
 import android.app.PendingIntent
 import android.content.Intent
 import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.msop.player.core.common.log.AppLog
@@ -52,8 +53,28 @@ class PlaybackService : MediaSessionService() {
 
         val builder = MediaSession.Builder(this, player)
         // 点通知要能回到应用；拿不到启动 Intent 时就不设，Media3 会用默认行为
-        launchIntent()?.let(builder::setSessionActivity)
+        val activityIntent = launchIntent()
+        activityIntent?.let(builder::setSessionActivity)
         mediaSession = builder.build()
+
+        // 2026-11-16 第十三轮：用户拍板「换回系统默认媒体大卡」（方案 B）。
+        // 之前的自绘卡（普通通知 + DecoratedCustomViewStyle + RemoteViews）布局可控，
+        // 但卡外要套一圈系统白底、锁屏还会被重新套白，跟截图里的系统媒体卡是两种东西；
+        // 那两个截图的来源项目 Convx 本身也只用 DefaultMediaNotificationProvider。
+        val notificationProvider = DefaultMediaNotificationProvider.Builder(this)
+            .setChannelId(CHANNEL_ID)
+            .setChannelName(R.string.notif_channel_playing)
+            .setNotificationId(NOTIFICATION_ID)
+            .build()
+        // 1.11 的 Builder 没有 setSmallIcon，小图标是实例方法（默认是 Media3 自带的播放图标）
+        notificationProvider.setSmallIcon(R.drawable.ic_stat_msop)
+        setMediaNotificationProvider(notificationProvider)
+    }
+
+    private companion object {
+        /** 每次换 id 才能改通知的渠道设置；MediaStyle 由系统渲染成大卡 + 传输键。 */
+        const val CHANNEL_ID = "msop_playback_v3"
+        const val NOTIFICATION_ID = 1001
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? =

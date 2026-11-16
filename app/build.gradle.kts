@@ -4,6 +4,8 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    // P7-04：备份清单/歌单/设置用 JSON
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
 }
@@ -110,6 +112,20 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
+    implementation(libs.kotlinx.serialization.json)
+
+    // P7-09：标题栏毛玻璃。Haze 2.x 拆成 core（hazeSource 捕获）与 blur（hazeBlur 效果）两个模块。
+    implementation(libs.haze.core)
+    implementation(libs.haze.blur)
+
+    // 2026-11-14：底部液态玻璃（Kyant0 Backdrop，Apache-2.0）。折射透镜/色差在
+    // API 33+，磨砂+饱和度在 API 31+，更低版本由 onDrawSurface 不透明底兜底。
+    implementation(libs.kyant.backdrop)
+
+    // P3-04：设置页要读 MediaCache（其内部持有 SimpleCache），
+    // 显式声明编译期可见，避免依赖 feature:player 的 implementation 传递。
+    implementation(libs.media3.datasource)
+    implementation(libs.media3.database)
 
     testImplementation(libs.junit)
 

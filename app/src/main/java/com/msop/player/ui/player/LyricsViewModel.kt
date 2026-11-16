@@ -48,4 +48,15 @@ class LyricsViewModel @Inject constructor(
             }
         }
     }
+
+    /**
+     * 强制重读当前曲目的歌词（2026-11-15：歌词页三点菜单的「重新加载歌词」）。
+     *
+     * [load] 对同一首是幂等早退的（`track.id == currentTrackId` 直接 return），
+     * 所以重载必须先把 id 清掉，否则点了菜单没有任何反应。
+     */
+    fun reload(track: Track?) {
+        currentTrackId = null
+        load(track)
+    }
 }

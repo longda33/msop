@@ -21,6 +21,9 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- 均衡器需要 attach 到 audio session；部分 ROM 要求声明此权限 -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- P7-08：桌面悬浮歌词，用户需在系统设置里授予「显示在其他应用上层」 -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <application
         android:name=".MsopApplication"
@@ -57,6 +60,18 @@
             <intent-filter>
                 <action android:name="androidx.media3.session.MediaSessionService" />
             </intent-filter>
+        </service>
+
+        <!-- 桌面悬浮歌词（P7-08）。specialUse：既不播音频也不做定位，
+             只是维持一个悬浮窗；不要复用 mediaPlayback 类型。 -->
+        <service
+            android:name=".desktop.DesktopLyricsService"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="desktop_lyrics" />
         </service>
 
         <!-- 关闭 WorkManager 的默认初始化，改由 MsopApplication 提供 HiltWorkerFactory。

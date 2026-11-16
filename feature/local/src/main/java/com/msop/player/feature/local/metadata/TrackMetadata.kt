@@ -14,9 +14,23 @@ data class TrackMetadata(
     val trackNo: Int? = null,
     val discNo: Int? = null,
     val durationMs: Long = 0L,
+    val bitrateKbps: Int? = null,
+    val sampleRateHz: Int? = null,
+    val bitDepth: Int? = null,
 ) {
     /** 一条标签都没读到（文件损坏、格式不支持、或本来就没写标签）。 */
     val isEmpty: Boolean
         get() = title == null && artist == null && album == null &&
-            year == null && trackNo == null && discNo == null && durationMs <= 0L
+            year == null && trackNo == null && discNo == null && durationMs <= 0L &&
+            bitrateKbps == null && sampleRateHz == null && bitDepth == null
+}
+
+/** 音频技术参数，与标签分开读：老文件可能没标签，但码率/采样率仍然可读。 */
+data class AudioQuality(
+    val bitrateKbps: Int? = null,
+    val sampleRateHz: Int? = null,
+    val bitDepth: Int? = null,
+) {
+    val isEmpty: Boolean
+        get() = bitrateKbps == null && sampleRateHz == null && bitDepth == null
 }

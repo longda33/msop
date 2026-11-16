@@ -12,6 +12,15 @@ data class LyricLine(
     val timeMs: Long,
     val text: String,
     val words: List<LyricWord> = emptyList(),
+    /** 这一行结束的时间点；LRC 没有结束标签，只有 TTML 的 end/dur 会填。 */
+    val endMs: Long? = null,
+    /**
+     * 逐字高亮时词与词之间插入什么。
+     *
+     * LRC 的逐字标签通常按音节切分，需要空格拼接；TTML 的 span 文本自带原样空白，
+     * 中文更不能插空格，所以用空串。见 [TtmlParser]。
+     */
+    val wordJoiner: String = " ",
 )
 
 /**

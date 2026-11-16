@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 系统媒体通知渠道名（通知栏「正在播放」那一栏显示的文字） -->
+    <string name="notif_channel_playing">正在播放</string>
+</resources>

@@ -69,13 +69,32 @@ object ServerUrl {
             .build()
 
     /** 把远程曲目用的内部 URI（`openlist:/xxx.flac`）还原成 OpenList 路径。 */
-    fun pathFromInternalUri(uri: String): String? {
+    fun pathFromInternalUri(uri: String): String? = parseInternalUri(uri)?.path
+
+    /** 内部 URI 的两段：profileId 决定用哪台服务器，path 决定文件。 */
+    data class Internal(val profileId: String?, val path: String)
+
+    /**
+     * 解析 `openlist:{profileId}:/路径`；也兼容 2026-11-16 之前的 `openlist:/路径`
+     * （没有 profileId 时由调用方回落到第一台启用项）。
+     */
+    fun parseInternalUri(uri: String): Internal? {
         if (!uri.startsWith(SCHEME)) return null
-        val path = uri.removePrefix(SCHEME)
-        return if (path.startsWith('/')) path else "/$path"
+        val rest = uri.removePrefix(SCHEME)
+        if (rest.startsWith('/')) return Internal(null, rest)
+        val sep = rest.indexOf(':')
+        if (sep <= 0) return Internal(null, if (rest.isBlank()) "/" else "/$rest")
+        val profileId = rest.substring(0, sep).takeIf { it.isNotBlank() }
+        val rawPath = rest.substring(sep + 1)
+        val path = if (rawPath.startsWith('/')) rawPath else "/$rawPath"
+        return Internal(profileId, path)
     }
 
     fun internalUri(path: String): String = SCHEME + (if (path.startsWith('/')) path else "/$path")
+
+    /** 带 profile 的内部 URI，多台同时启用时用它区分服务器。 */
+    fun internalUri(profileId: String, path: String): String =
+        SCHEME + profileId + ":" + (if (path.startsWith('/')) path else "/$path")
 
     /** 远程曲目的稳定 URI scheme。绝不把带 tempauth 的 raw_url 存进数据库。 */
     const val SCHEME = "openlist:"

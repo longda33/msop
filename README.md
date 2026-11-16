@@ -60,6 +60,7 @@ release 签名读根目录的 `keystore.properties`（与 `app/release.jks` 一�
 
 | 文件 | 内容 |
 |---|---|
+| [`INDEX.md`](INDEX.md) | **目录导航**：读什么 / 跳过什么、代码入口、常用命令、归档约定 |
 | [`AGENTS.md`](AGENTS.md) | 交接契约：当前状态、硬约束、下一步、踩过的坑 |
 | [`TASKS.md`](TASKS.md) | 分阶段任务与验收标准 |
 | [`USAGE.md`](USAGE.md) | 使用说明：权限、目录、OpenList 配置、播放、构建 |
@@ -67,8 +68,8 @@ release 签名读根目录的 `keystore.properties`（与 `app/release.jks` 一�
 | [`docs/03-openlist-api.md`](docs/03-openlist-api.md) | OpenList 实测：原生 REST、Subsonic、WebDAV 与决策依据 |
 | [`docs/04-reference-index.md`](docs/04-reference-index.md) | 实现参考索引 |
 | [`docs/05-progress.md`](docs/05-progress.md) | 进度日志与踩坑记录 |
-| [`docs/07-ui-design.md`](docs/07-ui-design.md) | UI 设计与 Compose 落地映射 |
-| [`docs/design/prototype.html`](docs/design/prototype.html) | 可交互 UI 原型（浏览器打开） |
+| [`docs/07-ui-design.md`](docs/07-ui-design.md) | 当前 UI 设计说明：Aurora Glass 令牌、组件清单与优化待办 |
+| [`preview/baseline/`](preview/baseline/) | 当前界面基线截图（库页 / 播放中 / 播放页） |
 
 ## 说明
 

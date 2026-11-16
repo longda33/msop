@@ -18,16 +18,35 @@ import java.time.format.DateTimeParseException
  */
 object RemoteTrackMapper {
 
-    fun toTrack(item: FsItem, path: String, nowSeconds: Long): Track {
+    fun toTrack(item: FsItem, path: String, nowSeconds: Long): Track =
+        toTrack(item, profileId = null, path = path, nowSeconds = nowSeconds)
+
+    /**
+     * @param profileId 这条曲目属于哪台服务器；多台同时启用时 id / uri 都带上它，
+     *   播放时 `OpenListClient.resolve` 才知道该找哪一台换直链。
+     */
+    fun toTrack(item: FsItem, profileId: String?, path: String, nowSeconds: Long): Track {
         val normalized = RemoteIdFactory.normalizePath(path)
         return Track(
-            id = RemoteIdFactory.id(normalized),
+            id = if (profileId.isNullOrBlank()) {
+                RemoteIdFactory.id(normalized)
+            } else {
+                RemoteIdFactory.id(profileId, normalized)
+            },
             source = SourceType.OPENLIST,
-            uri = ServerUrl.internalUri(normalized),
+            uri = if (profileId.isNullOrBlank()) {
+                ServerUrl.internalUri(normalized)
+            } else {
+                ServerUrl.internalUri(profileId, normalized)
+            },
             title = RemoteIdFactory.displayTitle(item.name),
             artist = null,
             album = RemoteIdFactory.parentName(normalized),
-            albumId = RemoteIdFactory.albumId(normalized),
+            albumId = if (profileId.isNullOrBlank()) {
+                RemoteIdFactory.albumId(normalized)
+            } else {
+                RemoteIdFactory.albumId(profileId, normalized)
+            },
             durationMs = 0L,
             coverUri = null,
             sizeBytes = item.size,

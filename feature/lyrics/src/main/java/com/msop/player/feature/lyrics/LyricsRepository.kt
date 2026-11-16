@@ -19,12 +19,15 @@ import javax.inject.Singleton
 
 /**
  * 歌词加载。两种来源，按顺序尝试：
- * 1. **同名 `.lrc` 旁挂文件**（优先，通常带时间轴）
+ * 1. **同名旁挂文件**：`.lrc` → `.ttml` → `.xml`（`.xml` 只有内容像 TTML 才认）
  * 2. **音频文件内嵌歌词**（MP3 的 ID3 `USLT`、FLAC 的 Vorbis Comment `LYRICS`）
  *
- * 为什么不直接用 `File(path)` 读 `.lrc`：Android 10+ 的分区存储只放行**媒体文件**的裸路径，
- * `.lrc` 不是媒体，按路径读会 EACCES。而扫描时 SAF 目录是有持久授权的，所以走 SAF：
- * 把 `xxx.mp3` 的 documentId 换成 `xxx.lrc`，用同一棵树的授权打开。
+ * 旁挂文件优先，因为用户手动放的歌词通常最准。扩展名按上面的顺序找，找到就停：
+ * 有 `.lrc` 时不会再去读 `.ttml`。
+ *
+ * 为什么不直接用 `File(path)` 读旁挂歌词：Android 10+ 的分区存储只放行**媒体文件**的裸路径，
+ * `.lrc`/`.ttml` 不是媒体，按路径读会 EACCES。而扫描时 SAF 目录是有持久授权的，所以走 SAF：
+ * 把 `xxx.mp3` 的 documentId 换成 `xxx.lrc` / `xxx.ttml`，用同一棵树的授权打开。
  *
  * 旁挂文件的查找顺序：
  * 1. 曲目本身是 SAF 文档 URI → 直接换扩展名找兄弟文档
@@ -41,13 +44,10 @@ class LyricsRepository @Inject constructor(
 ) {
 
     suspend fun load(track: Track): Lyrics? = withContext(Dispatchers.IO) {
-        val sidecar = readDirectDocumentSibling(track.uri)
-            ?: readTreeSibling(track.localPath)
-            ?: readLocalSibling(track.localPath)
-
+        val sidecar = findSidecar(track)
         if (sidecar != null) {
-            val parsed = LrcParser.parse(LrcParser.decode(sidecar))
-            if (!parsed.isEmpty) return@withContext parsed
+            val parsed = parseSidecar(sidecar)
+            if (parsed != null && !parsed.isEmpty) return@withContext parsed
         }
 
         val embedded = readEmbedded(track)
@@ -56,9 +56,9 @@ class LyricsRepository @Inject constructor(
             return@withContext null
         }
 
-        // USLT 里也常见带时间轴的 LRC 文本，能解析出时间就用时间轴，否则静态展示
-        LrcParser.parse(embedded).takeIf { !it.isEmpty }
-            ?: Lyrics.plain(embedded).takeIf { !it.isEmpty }
+        // USLT / LYRICS 里也常见整段 TTML 或带时间轴的 LRC；都解析不出来才按纯文本展示。
+        parseText(embedded)
+            ?: Lyrics.plain(embedded).takeIf { !TtmlParser.looksLikeTtml(embedded) && !it.isEmpty }
     }
 
     /** 直接从音频文件里读内嵌歌词；远程曲目不在这一步处理。 */
@@ -83,19 +83,61 @@ class LyricsRepository @Inject constructor(
         return if (file.isFile) FileInputStream(file) else null
     }
 
-    /** `content://authority/tree/<treeId>/document/<docId>` → 同目录的 `<name>.lrc`。 */
-    private fun readDirectDocumentSibling(uri: String): ByteArray? {
+    private data class Sidecar(val extension: String, val text: String)
+
+    /**
+     * 按 `.lrc` → `.ttml` → `.xml` 查找旁挂文件。
+     *
+     * 每个扩展名都依次试「文档兄弟 → 授权树 → 裸路径」，避免 MediaStore 曲目因为
+     * 某个目录不在树里就整个放弃。
+     */
+    private fun findSidecar(track: Track): Sidecar? {
+        for (extension in SIDECAR_EXTENSIONS) {
+            val bytes = readDirectDocumentSibling(track.uri, extension)
+                ?: readTreeSibling(track.localPath, extension)
+                ?: readLocalSibling(track.localPath, extension)
+                ?: continue
+
+            val text = LrcParser.decode(bytes)
+            // `.xml` 可能是别的元数据；内容不像 TTML 就当它不存在。
+            if (extension != "lrc" && !TtmlParser.looksLikeTtml(text)) continue
+            return Sidecar(extension, text)
+        }
+        return null
+    }
+
+    private fun parseSidecar(sidecar: Sidecar): Lyrics? = when (sidecar.extension) {
+        "lrc" -> parseText(sidecar.text)
+        else -> TtmlParser.parse(sidecar.text).takeIf { !it.isEmpty }
+            ?: Lyrics.plain(sidecar.text)
+                .takeIf { !TtmlParser.looksLikeTtml(sidecar.text) && !it.isEmpty }
+    }
+
+    /**
+     * 先按 TTML 解析，再按 LRC 解析。
+     *
+     * `.lrc` 文件里塞 TTML 的情况真实存在（导出工具把扩展名写错），所以不只看扩展名。
+     */
+    private fun parseText(raw: String): Lyrics? {
+        if (TtmlParser.looksLikeTtml(raw)) {
+            TtmlParser.parse(raw).takeIf { !it.isEmpty }?.let { return it }
+        }
+        return LrcParser.parse(raw).takeIf { !it.isEmpty }
+    }
+
+    /** `content://authority/tree/<treeId>/document/<docId>` → 同目录的 `<name>.<extension>`。 */
+    private fun readDirectDocumentSibling(uri: String, extension: String): ByteArray? {
         val documentUri = runCatching { Uri.parse(uri) }.getOrNull() ?: return null
         if (documentUri.scheme != ContentResolver.SCHEME_CONTENT) return null
 
         val segments = documentUri.pathSegments
         if (segments.size < 4 || segments[0] != "tree" || segments[2] != "document") return null
 
-        val lrcDocumentId = withLrcExtension(segments[3]) ?: return null
+        val siblingDocumentId = withExtension(segments[3], extension) ?: return null
         return runCatching {
             val treeUri = DocumentsContract.buildTreeDocumentUri(documentUri.authority, segments[1])
-            val lrcUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, lrcDocumentId)
-            context.contentResolver.openInputStream(lrcUri)?.use { it.readBytes() }
+            val siblingUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, siblingDocumentId)
+            context.contentResolver.openInputStream(siblingUri)?.use { it.readBytes() }
         }.onFailure {
             AppLog.i("SAF 歌词读取失败 uri=$uri 原因=${it.javaClass.simpleName}")
         }.getOrNull()
@@ -106,7 +148,7 @@ class LyricsRepository @Inject constructor(
      * `/storage/emulated/0/Music/MsopTest/a.mp3` + 树根 `primary:Music`
      * → documentId `primary:Music:MsopTest/a.lrc`。
      */
-    private fun readTreeSibling(localPath: String?): ByteArray? {
+    private fun readTreeSibling(localPath: String?, extension: String): ByteArray? {
         if (localPath.isNullOrBlank()) return null
 
         for (treeUriString in safRoots.treeUris()) {
@@ -119,35 +161,35 @@ class LyricsRepository @Inject constructor(
             if (!localPath.startsWith("$rootPath/")) continue
 
             val relative = localPath.removePrefix("$rootPath/")
-            val sibling = withLrcExtension(relative) ?: continue
-            val lrcUri = DocumentsContract.buildDocumentUriUsingTree(
+            val sibling = withExtension(relative, extension) ?: continue
+            val siblingUri = DocumentsContract.buildDocumentUriUsingTree(
                 treeUri,
                 "$treeDocumentId:$sibling",
             )
 
             val bytes = runCatching {
-                context.contentResolver.openInputStream(lrcUri)?.use { it.readBytes() }
+                context.contentResolver.openInputStream(siblingUri)?.use { it.readBytes() }
             }.getOrNull()
             if (bytes != null) return bytes
         }
         return null
     }
 
-    private fun readLocalSibling(localPath: String?): ByteArray? {
+    private fun readLocalSibling(localPath: String?, extension: String): ByteArray? {
         if (localPath.isNullOrBlank()) return null
         return runCatching {
             val audio = File(localPath)
-            File(audio.parentFile, audio.nameWithoutExtension + ".lrc")
+            File(audio.parentFile, audio.nameWithoutExtension + "." + extension)
                 .takeIf { it.isFile }
                 ?.readBytes()
         }.getOrNull()
     }
 
-    /** `a/b/song.mp3` → `a/b/song.lrc`；没有扩展名时返回 null（不猜）。 */
-    private fun withLrcExtension(path: String): String? {
+    /** `a/b/song.mp3` → `a/b/song.<extension>`；没有扩展名时返回 null（不猜）。 */
+    private fun withExtension(path: String, extension: String): String? {
         val dot = path.lastIndexOf('.')
         if (dot <= path.lastIndexOf('/')) return null
-        return path.substring(0, dot) + ".lrc"
+        return path.substring(0, dot) + "." + extension
     }
 
     /** `primary:Music` → `/storage/emulated/0/Music`；与 feature:local 的 SafPaths 同一套规则。 */
@@ -165,5 +207,9 @@ class LyricsRepository @Inject constructor(
             "/storage/$volume"
         }
         return "$root/$relative"
+    }
+
+    private companion object {
+        val SIDECAR_EXTENSIONS = listOf("lrc", "ttml", "xml")
     }
 }

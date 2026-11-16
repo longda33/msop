@@ -24,6 +24,12 @@ work = "2.12.0"
 datastore = "1.3.0"
 securityCrypto = "1.1.0"
 junit = "4.13.2"
+# P7-09：Haze 2.x 模块化（core + blur）。与项目同代：Kotlin 2.4.21 /
+# lifecycle 2.11.0 / activity 1.13.0 / Compose 1.12.x。
+haze = "2.1.0"
+# 2026-11-14：Kyant0 Backdrop 液态玻璃（Apache-2.0，与 ShuYin 同源上游库）。
+# Maven Central 实采最新稳定版；lens 效果需 API 33+，blur/vibrancy 需 API 31+。
+backdrop = "2.0.1"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
@@ -43,6 +49,8 @@ compose-material-icons-core = { module = "androidx.compose.material:material-ico
 
 media3-exoplayer = { module = "androidx.media3:media3-exoplayer", version.ref = "media3" }
 media3-session = { module = "androidx.media3:media3-session", version.ref = "media3" }
+media3-datasource = { module = "androidx.media3:media3-datasource", version.ref = "media3" }
+media3-database = { module = "androidx.media3:media3-database", version.ref = "media3" }
 media3-datasource-okhttp = { module = "androidx.media3:media3-datasource-okhttp", version.ref = "media3" }
 media3-ui-compose = { module = "androidx.media3:media3-ui-compose", version.ref = "media3" }
 
@@ -71,6 +79,13 @@ androidx-datastore-preferences = { module = "androidx.datastore:datastore-prefer
 androidx-security-crypto = { module = "androidx.security:security-crypto", version.ref = "securityCrypto" }
 
 junit = { module = "junit:junit", version.ref = "junit" }
+
+# P7-09 标题栏毛玻璃：core 负责 hazeSource 捕获，blur 负责 hazeBlur 效果。
+haze-core = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }
+haze-blur = { module = "dev.chrisbanes.haze:haze-blur", version.ref = "haze" }
+
+# 2026-11-14 底部液态玻璃（导航胶囊/迷你条）：折射透镜+色差+果冻挤压。
+kyant-backdrop = { module = "io.github.kyant0:backdrop", version.ref = "backdrop" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

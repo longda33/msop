@@ -5,12 +5,13 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-/** 歌单。[createdAt] 用于列表倒序，最近创建的在上面。 */
+/** 歌单。[sortOrder] 是用户拖动排序后的位置（升序，0 在最上面）。 */
 @Entity(tableName = "playlists")
 data class PlaylistEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val createdAt: Long,
+    val sortOrder: Int = 0,
 )
 
 /**

@@ -46,24 +46,26 @@ class OpenListClient @Inject constructor(
         .followRedirects(true)
         .build()
 
-    @Volatile
-    private var token: String? = configStore.cachedToken()
+    /**
+     * 内存里的 JWT，**按 profile 分开**：多台同时启用时来回取直链不会互相踢掉登录态。
+     * 持久化仍按 profile 存在 SharedPreferences 里。
+     */
+    private val tokens = java.util.concurrent.ConcurrentHashMap<String, String>()
 
-    fun hasConfig(): Boolean = configStore.load()?.configured == true
+    fun hasConfig(): Boolean = configStore.enabledConfigs().any { it.configured }
 
     /** 换服务器或改密码后调用，避免旧 JWT 一直被复用。 */
     fun clearSession() {
-        token = null
-        configStore.saveToken(null)
+        tokens.clear()
     }
 
     // ---------------------------------------------------------------- 登录
 
     private fun validToken(config: ServerConfig): String {
-        token?.let { return it }
-        val cached = configStore.cachedToken()
+        tokens[config.id]?.let { return it }
+        val cached = configStore.cachedToken(config.id)
         if (!cached.isNullOrBlank()) {
-            token = cached
+            tokens[config.id] = cached
             return cached
         }
         return loginBlocking(config)
@@ -77,15 +79,23 @@ class OpenListClient @Inject constructor(
             .build()
         val newToken = execute<LoginData>(request).data?.token?.takeIf { it.isNotBlank() }
             ?: throw OpenListException.Auth()
-        token = newToken
-        configStore.saveToken(newToken)
+        tokens[config.id] = newToken
+        configStore.saveToken(config.id, newToken)
         return newToken
     }
 
     // ---------------------------------------------------------------- 列目录 / 直链
 
-    fun listBlocking(path: String, page: Int, perPage: Int = PAGE_SIZE): FsListData {
-        val config = requireConfig()
+    fun listBlocking(path: String, page: Int, perPage: Int = PAGE_SIZE): FsListData =
+        listBlockingWith(requireConfig(), path, page, perPage)
+
+    /** 列目录，但显式指定配置——用于「测试未启用的那条」而不切换启用项。 */
+    fun listBlockingWith(
+        config: ServerConfig,
+        path: String,
+        page: Int,
+        perPage: Int = PAGE_SIZE,
+    ): FsListData {
         val body = json.encodeToString(FsListRequest(path = path, page = page, perPage = perPage))
         return authed<FsListData>(config, "api/fs/list", body).data ?: FsListData()
     }
@@ -93,8 +103,13 @@ class OpenListClient @Inject constructor(
     suspend fun list(path: String, page: Int, perPage: Int = PAGE_SIZE): FsListData =
         withContext(Dispatchers.IO) { listBlocking(path, page, perPage) }
 
-    fun rawUrlBlocking(path: String): String {
-        val config = requireConfig()
+    fun rawUrlBlocking(path: String): String = rawUrlBlocking(requireConfig(), path)
+
+    /** 指定配置取直链：多台同时启用时，曲目 uri 里的 profile 决定用哪一台。 */
+    fun rawUrlBlocking(config: ServerConfig, path: String): String {
+        if (config.baseUrl.startsWith("http://", ignoreCase = true) && !config.allowPlainHttp) {
+            throw OpenListException.PlainHttpNotConfirmed()
+        }
         val body = json.encodeToString(FsGetRequest(path))
         val data = authed<FsGetData>(config, "api/fs/get", body).data
             ?: throw OpenListException.Api(-1, "fs/get 未返回数据")
@@ -105,11 +120,17 @@ class OpenListClient @Inject constructor(
     suspend fun rawUrl(path: String): String = withContext(Dispatchers.IO) { rawUrlBlocking(path) }
 
     /** 连通性测试：强制重新登录 + 列一次根目录，返回条目总数。 */
-    fun testConnectionBlocking(): Int {
-        val config = requireConfig()
-        clearSession()
+    fun testConnectionBlocking(): Int = testConnectionBlocking(requireConfig())
+
+    /** 对指定配置做连通性测试（不清别的 profile 的 token、不改启用项）。 */
+    fun testConnectionBlocking(config: ServerConfig): Int {
+        if (config.baseUrl.startsWith("http://", ignoreCase = true) && !config.allowPlainHttp) {
+            throw OpenListException.PlainHttpNotConfirmed()
+        }
+        tokens.remove(config.id)
+        configStore.saveToken(config.id, null)
         loginBlocking(config)
-        return listBlocking("/", 1, 1).total
+        return listBlockingWith(config, "/", 1, 1).total
     }
 
     suspend fun testConnection(): Int = withContext(Dispatchers.IO) { testConnectionBlocking() }
@@ -121,15 +142,42 @@ class OpenListClient @Inject constructor(
      * 非 `openlist:` URI 原样返回，本地歌曲不受影响。
      */
     override fun resolve(internalUri: String): String {
-        val path = ServerUrl.pathFromInternalUri(internalUri) ?: return internalUri
-        return rawUrlBlocking(path)
+        val parsed = ServerUrl.parseInternalUri(internalUri) ?: return internalUri
+        return rawUrlBlocking(resolveConfig(parsed.profileId), parsed.path)
+    }
+
+    /**
+     * 按 profile 找配置；没有 profile 前缀（老数据）或找不到时回落第一台启用项。
+     */
+    fun resolveConfig(profileId: String?): ServerConfig {
+        val config = profileId
+            ?.let { id -> configStore.profiles().firstOrNull { it.id == id } }
+            ?: configStore.activeConfig()
+        val usable = config?.takeIf { it.configured }
+            ?: throw OpenListException.NotConfigured()
+        if (usable.baseUrl.startsWith("http://", ignoreCase = true) && !usable.allowPlainHttp) {
+            throw OpenListException.PlainHttpNotConfirmed()
+        }
+        return usable
     }
 
     // ---------------------------------------------------------------- 内部
 
-    private fun requireConfig(): ServerConfig =
-        configStore.load()?.takeIf { it.configured }
+    /**
+     * 取当前启用配置。
+     *
+     * 2026-11-16 起 App 允许明文 HTTP（manifest 的 network security config 放开了 base-config），
+     * 但**只在用户对这条配置做过二次确认**（`allowPlainHttp=true`）时才真的发请求——
+     * 否则抛 [OpenListException.PlainHttpNotConfirmed]，把「明文」这件事留在用户手里决定。
+     */
+    private fun requireConfig(): ServerConfig {
+        val config = configStore.load()?.takeIf { it.configured }
             ?: throw OpenListException.NotConfigured()
+        if (config.baseUrl.startsWith("http://", ignoreCase = true) && !config.allowPlainHttp) {
+            throw OpenListException.PlainHttpNotConfirmed()
+        }
+        return config
+    }
 
     private fun buildRequest(
         config: ServerConfig,
@@ -156,7 +204,7 @@ class OpenListClient @Inject constructor(
             val retryable = (e is OpenListException.Http && (e.status == 401 || e.status == 403)) ||
                 e is OpenListException.Auth
             if (!retryable) throw e
-            token = null
+            tokens.remove(config.id)
             val retry = buildRequest(config, path, bodyJson, loginBlocking(config))
             execute<T>(retry)
         }

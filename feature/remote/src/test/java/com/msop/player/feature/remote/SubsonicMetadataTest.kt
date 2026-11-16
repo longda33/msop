@@ -18,6 +18,9 @@ class SubsonicMetadataTest {
         coverArt: String? = "al-e32892411a34",
         size: Long = 34_929_358L,
         contentType: String? = "audio/flac",
+        bitRate: Int? = 2_304,
+        samplingRate: Int? = 96_000,
+        bitDepth: Int? = 24,
     ) = SubsonicSong(
         id = "so-1",
         title = title,
@@ -28,6 +31,9 @@ class SubsonicMetadataTest {
         contentType = contentType,
         path = path,
         albumId = "al-e32892411a34",
+        bitRate = bitRate,
+        samplingRate = samplingRate,
+        bitDepth = bitDepth,
     )
 
     private fun track(
@@ -136,5 +142,26 @@ class SubsonicMetadataTest {
             meta,
         ) { "x" }
         assertEquals(123L, out.sizeBytes)
+    }
+
+    @Test
+    fun `音质字段映射到元数据`() {
+        val meta = SubsonicMetadata.toMeta(song())!!
+        assertEquals(2_304, meta.bitrateKbps)
+        assertEquals(96_000, meta.sampleRateHz)
+        assertEquals(24, meta.bitDepth)
+    }
+
+    @Test
+    fun `音质补全且已有值不被清空`() {
+        val meta = SubsonicMetadata.toMeta(song(bitRate = 0, samplingRate = 44_100, bitDepth = 0))!!
+        val out = SubsonicMetadata.enrich(
+            track().copy(bitrateKbps = 1_411, bitDepth = 16),
+            meta,
+        ) { "x" }
+
+        assertEquals(1_411, out.bitrateKbps)
+        assertEquals(44_100, out.sampleRateHz)
+        assertEquals(16, out.bitDepth)
     }
 }

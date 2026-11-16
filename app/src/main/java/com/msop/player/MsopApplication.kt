@@ -5,6 +5,7 @@ import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import coil3.ImageLoader
 import coil3.PlatformContext
+import coil3.memory.MemoryCache
 import coil3.SingletonImageLoader
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.crossfade
@@ -33,11 +34,30 @@ class MsopApplication : Application(), Configuration.Provider, SingletonImageLoa
             .setWorkerFactory(workerFactory)
             .build()
 
-    override fun newImageLoader(context: PlatformContext): ImageLoader =
-        ImageLoader.Builder(context)
+    /**
+     * P5-04：显式配内存缓存，而不是吃 Coil 的默认值。
+     *
+     * 曲库列表一屏十几张封面，5 万首库来回滚时同一张专辑的封面会被反复请求。
+     * 默认缓存按可用内存的一个比例算，在大库 + 大图（远程 JPEG 129KB）场景下
+     * 命中率不够，滚动时会看到封面「闪一下才出来」。
+     *
+     * 这里给固定上限：占可用堆的 20%，且不超过 96MB。上限封顶是为了在低端机
+     * （堆本身只有 192MB 左右）上不至于把播放器挤到 OOM——封面缓存永远不该
+     * 比正在解码的音频缓冲更值钱。
+     */
+    override fun newImageLoader(context: PlatformContext): ImageLoader {
+        val maxHeap = Runtime.getRuntime().maxMemory()
+        val cacheBytes = minOf((maxHeap * 0.20).toLong(), MAX_MEMORY_CACHE_BYTES)
+        return ImageLoader.Builder(context)
             .components { add(OkHttpNetworkFetcherFactory()) }
+            .memoryCache {
+                MemoryCache.Builder()
+                    .maxSizeBytes(cacheBytes)
+                    .build()
+            }
             .crossfade(true)
             .build()
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -45,5 +65,10 @@ class MsopApplication : Application(), Configuration.Provider, SingletonImageLoa
         AppLog.i("Application onCreate 开始")
         CrashReporter.install()
         AppLog.i("崩溃捕获已安装，启动完成")
+    }
+
+    private companion object {
+        /** 封面内存缓存硬上限。见 [newImageLoader] 的说明。 */
+        const val MAX_MEMORY_CACHE_BYTES = 96L * 1024 * 1024
     }
 }

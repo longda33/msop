@@ -25,6 +25,9 @@ sealed class OpenListException(message: String, cause: Throwable? = null) :
     class EmptyStreamUrl : OpenListException("这首歌没有拿到可用的播放直链")
 
     class BadResponse : OpenListException("服务器返回的内容无法解析")
+
+    /** 地址是明文 HTTP，但这条配置没做过二次确认；请求层面拒绝，不发给网络。 */
+    class PlainHttpNotConfirmed : OpenListException("该地址是明文 HTTP，尚未确认允许明文连接")
 }
 
 /** 给 UI 直接显示的中文提示。 */
@@ -40,4 +43,6 @@ fun OpenListException.userMessage(): String = when (this) {
     is OpenListException.Api -> "服务器返回错误：$serverMessage"
     is OpenListException.EmptyStreamUrl -> "这首歌取不到播放直链，可能已被移动或删除"
     is OpenListException.BadResponse -> "服务器返回的不是预期数据，确认填的是 OpenList 地址"
+    is OpenListException.PlainHttpNotConfirmed ->
+        "这个地址是 http:// 明文，请重新保存并在确认弹窗里点「仍然继续」"
 }

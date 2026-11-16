@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import com.msop.player.feature.player.equalizer.EqualizerBand
 import com.msop.player.feature.player.equalizer.EqualizerState
 import com.msop.player.feature.player.equalizer.EqualizerTuning
+import com.msop.player.ui.components.AmbientBackground
 import com.msop.player.ui.components.GroupTitle
 import com.msop.player.ui.components.IconAction
 import com.msop.player.ui.theme.Dim
@@ -62,117 +63,119 @@ fun EqualizerScreen(
 ) {
     BackHandler(onBack = onBack)
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Palette.Ink)
-            .statusBarsPadding()
-            .navigationBarsPadding(),
-    ) {
-        Row(
+    Box(Modifier.fillMaxSize()) {
+        AmbientBackground()
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 4.dp, end = Dim.screen, top = 6.dp, bottom = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding(),
         ) {
-            IconAction(
-                icon = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = "返回",
-                onClick = onBack,
-            )
-            Text(
-                text = "均衡器",
-                style = MaterialTheme.typography.headlineSmall,
-                color = Palette.TextPrimary,
-                modifier = Modifier.weight(1f),
-            )
-            Switch(
-                checked = state.enabled,
-                onCheckedChange = onEnabledChange,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = Color.White,
-                    checkedTrackColor = Palette.Blue,
-                    uncheckedThumbColor = Palette.TextTertiary,
-                    uncheckedTrackColor = Palette.Surface3,
-                ),
-            )
-        }
-
-        Text(
-            text = if (state.attached) {
-                "已连接播放器 · ${state.bands.size} 段 · 已关闭 audio offload"
-            } else {
-                "尚未开始播放，设置已保存，开始播放后自动生效"
-            },
-            style = MaterialTheme.typography.labelSmall,
-            color = if (state.attached) Palette.Green else Palette.TextTertiary,
-            modifier = Modifier.padding(horizontal = Dim.screen, vertical = 4.dp),
-        )
-
-        GroupTitle("预设")
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = Dim.screen),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            EqualizerTuning.PRESETS.forEach { preset ->
-                val selected = state.presetName == preset.name
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(if (selected) Palette.Blue else Palette.Surface2)
-                        .clickable { onPreset(preset) }
-                        .padding(horizontal = 14.dp, vertical = 8.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = preset.name,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = if (selected) Color.White else Palette.TextSecondary,
-                    )
-                }
-            }
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = Dim.screen, end = Dim.screen, top = 18.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "频段",
-                style = MaterialTheme.typography.labelSmall,
-                color = Palette.TextTertiary,
-                modifier = Modifier.weight(1f),
-            )
-            TextButton(onClick = onReset) {
-                Text("恢复平直", color = Palette.BlueLight)
-            }
-        }
-
-        val min = state.minLevelMb.toFloat()
-        val max = state.maxLevelMb.toFloat()
-        // 设备若返回了退化范围（min >= max），Slider 会抛 IllegalArgumentException
-        val range = if (max > min) min..max else -1500f..1500f
-
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .padding(horizontal = Dim.screen),
-        ) {
-            items(items = state.bands, key = { it.index }) { band ->
-                BandSliderRow(
-                    band = band,
-                    enabled = state.enabled,
-                    range = range,
-                    onBandChange = onBandChange,
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 4.dp, end = Dim.screen, top = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconAction(
+                    icon = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "返回",
+                    onClick = onBack,
+                )
+                Text(
+                    text = "均衡器",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = Palette.TextPrimary,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(
+                    checked = state.enabled,
+                    onCheckedChange = onEnabledChange,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = Color.White,
+                        checkedTrackColor = Palette.Blue,
+                        uncheckedThumbColor = Palette.TextTertiary,
+                        uncheckedTrackColor = Palette.Surface3,
+                    ),
                 )
             }
-            item { Spacer(Modifier.height(24.dp)) }
+
+            Text(
+                text = if (state.attached) {
+                    "已连接播放器 · ${state.bands.size} 段 · 已关闭 audio offload"
+                } else {
+                    "尚未开始播放，设置已保存，开始播放后自动生效"
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = if (state.attached) Palette.Green else Palette.TextTertiary,
+                modifier = Modifier.padding(horizontal = Dim.screen, vertical = 4.dp),
+            )
+
+            GroupTitle("预设")
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = Dim.screen),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                EqualizerTuning.PRESETS.forEach { preset ->
+                    val selected = state.presetName == preset.name
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(if (selected) Palette.Blue else Palette.Surface2)
+                            .clickable { onPreset(preset) }
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = preset.name,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (selected) Color.White else Palette.TextSecondary,
+                        )
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = Dim.screen, end = Dim.screen, top = 18.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "频段",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Palette.TextTertiary,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onReset) {
+                    Text("恢复平直", color = Palette.BlueLight)
+                }
+            }
+
+            val min = state.minLevelMb.toFloat()
+            val max = state.maxLevelMb.toFloat()
+            // 设备若返回了退化范围（min >= max），Slider 会抛 IllegalArgumentException
+            val range = if (max > min) min..max else -1500f..1500f
+
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(horizontal = Dim.screen),
+            ) {
+                items(items = state.bands, key = { it.index }) { band ->
+                    BandSliderRow(
+                        band = band,
+                        enabled = state.enabled,
+                        range = range,
+                        onBandChange = onBandChange,
+                    )
+                }
+                item { Spacer(Modifier.height(24.dp)) }
+            }
         }
     }
 }

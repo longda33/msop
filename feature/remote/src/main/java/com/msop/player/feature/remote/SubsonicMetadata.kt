@@ -25,6 +25,11 @@ object SubsonicMetadata {
         val mimeType: String?,
         val sizeBytes: Long,
         val coverId: String?,
+        val bitrateKbps: Int? = null,
+        val sampleRateHz: Int? = null,
+        val bitDepth: Int? = null,
+        /** 秒；用于补「云端歌曲时长为空」的问题。 */
+        val durationSeconds: Long? = null,
     )
 
     fun fileNameOf(path: String?): String? =
@@ -46,6 +51,10 @@ object SubsonicMetadata {
                 ?: RemoteIdFactory.mimeType(fileName),
             sizeBytes = song.size,
             coverId = song.coverArt?.takeIf { it.isNotBlank() },
+            bitrateKbps = song.bitRate?.takeIf { it > 0 },
+            sampleRateHz = song.samplingRate?.takeIf { it > 0 },
+            bitDepth = song.bitDepth?.takeIf { it > 0 },
+            durationSeconds = song.duration?.takeIf { it > 0 },
         )
     }
 
@@ -68,6 +77,15 @@ object SubsonicMetadata {
             albumId = meta.albumId ?: track.albumId,
             mimeType = meta.mimeType ?: track.mimeType,
             sizeBytes = if (meta.sizeBytes > 0L) meta.sizeBytes else track.sizeBytes,
+            bitrateKbps = meta.bitrateKbps ?: track.bitrateKbps,
+            sampleRateHz = meta.sampleRateHz ?: track.sampleRateHz,
+            bitDepth = meta.bitDepth ?: track.bitDepth,
+            // 原生 REST 列目录不给时长，这里补上，曲库列表就不再显示 --:--
+            durationMs = if (track.durationMs <= 0L) {
+                (meta.durationSeconds ?: 0L) * 1000L
+            } else {
+                track.durationMs
+            },
             coverUri = meta.coverId
                 ?.let { id -> runCatching { coverUrl(id) }.getOrNull() }
                 ?: track.coverUri,

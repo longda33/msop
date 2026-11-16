@@ -55,7 +55,26 @@ object RemoteIdFactory {
 
     fun id(path: String): String = "openlist:" + sha1(normalizePath(path))
 
+    /**
+     * 多台同时启用时的稳定 ID：把 profile 前缀带上，两台服务器上的同名路径
+     * 不会再互相覆盖。格式 `openlist:{profileId}:{sha1}`。
+     */
+    fun id(profileId: String, path: String): String = "openlist:$profileId:" + sha1(normalizePath(path))
+
     fun albumId(path: String): String = "openlist:album:" + sha1(parentPath(path))
+
+    fun albumId(profileId: String, path: String): String =
+        "openlist:$profileId:album:" + sha1(parentPath(path))
+
+    /** WebDAV 第三音源的稳定 ID，与 OpenList 的 ID 空间隔离（P7-07）。 */
+    fun webDavId(path: String): String = "webdav:" + sha1(normalizePath(path))
+
+    fun webDavId(profileId: String, path: String): String = "webdav:$profileId:" + sha1(normalizePath(path))
+
+    fun webDavAlbumName(path: String): String {
+        val parent = parentPath(path)
+        return if (parent == "/") "WebDAV" else parent.substringAfterLast('/')
+    }
 
     private fun extension(name: String): String =
         name.substringAfterLast('.', "").lowercase(Locale.ROOT)

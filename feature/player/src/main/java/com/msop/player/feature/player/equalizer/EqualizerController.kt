@@ -29,6 +29,13 @@ data class EqualizerState(
     val maxLevelMb: Int = EqualizerTuning.LEVEL_MAX_MB,
 )
 
+/** 与设备无关的均衡器快照（P7-04 备份用，固定 10 段）。 */
+data class EqualizerTuningSnapshot(
+    val enabled: Boolean,
+    val presetName: String?,
+    val levelsMb: List<Int>,
+)
+
 /**
  * 10 段均衡器的唯一状态源，UI 与 [com.msop.player.feature.player.PlaybackService] 共用同一个单例。
  *
@@ -170,6 +177,51 @@ class EqualizerController @Inject constructor(
     }
 
     fun reset() = applyPreset(EqualizerTuning.PRESETS.first())
+
+    /** P7-04 备份：导出与设备无关的 10 段曲线。 */
+    @Synchronized
+    fun exportTuning(): EqualizerTuningSnapshot = EqualizerTuningSnapshot(
+        enabled = _state.value.enabled,
+        presetName = _state.value.presetName,
+        levelsMb = savedLevels(),
+    )
+
+    /**
+     * P7-04 恢复：写回偏好，已 attach 的设备立即生效。
+     * 设备段数可能不是 10，按频率映射后再下发，不能直接按索引写。
+     */
+    @Synchronized
+    fun importTuning(snapshot: EqualizerTuningSnapshot) {
+        val clamped = EqualizerTuning.CENTER_FREQUENCIES_HZ.indices.map { i ->
+            EqualizerTuning.clamp(snapshot.levelsMb.getOrElse(i) { 0 })
+        }
+        prefs.edit().apply {
+            putBoolean(KEY_ENABLED, snapshot.enabled)
+            putString(KEY_PRESET, snapshot.presetName)
+            clamped.forEachIndexed { i, level -> putInt(KEY_LEVEL_PREFIX + i, level) }
+        }.apply()
+
+        val state = _state.value
+        val displayed = if (deviceFreqsMhz.isEmpty()) {
+            clamped
+        } else {
+            EqualizerTuning.mapToBands(clamped, deviceFreqsMhz).map { clampToDevice(it, state) }
+        }
+        effect?.let { eq ->
+            displayed.forEachIndexed { band, level ->
+                runCatching { eq.setBandLevel(band.toShort(), level.toShort()) }
+            }
+            runCatching { eq.enabled = snapshot.enabled }
+        }
+        _state.value = state.copy(
+            enabled = snapshot.enabled,
+            presetName = snapshot.presetName,
+            bands = state.bands.mapIndexed { i, band ->
+                band.copy(levelMb = displayed.getOrElse(i) { 0 })
+            },
+        )
+        AppLog.i("均衡器已从备份恢复 preset=${snapshot.presetName} enabled=${snapshot.enabled}")
+    }
 
     private fun clampToDevice(levelMb: Int, state: EqualizerState): Int =
         EqualizerTuning.clamp(levelMb).coerceIn(state.minLevelMb, state.maxLevelMb)

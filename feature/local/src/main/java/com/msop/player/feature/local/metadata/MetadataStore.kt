@@ -18,6 +18,11 @@ interface MetadataStore {
      */
     suspend fun tracksNeedingMetadata(limit: Int): List<Track>
 
+    /**
+     * 需要补音质的曲目（P7-06）。默认空实现，纯 JVM 测试的 FakeStore 不需要关心。
+     */
+    suspend fun tracksNeedingQuality(limit: Int): List<Track> = emptyList()
+
     /** 还没有封面的曲目，按标题排序保证多次调用顺序稳定。 */
     suspend fun tracksMissingCover(limit: Int): List<Track>
 
@@ -27,4 +32,17 @@ interface MetadataStore {
 
     /** 全部非空的 `coverUri`，供封面缓存清理孤立文件。 */
     suspend fun referencedCovers(): Set<String>
+
+    /**
+     * 已有 `coverUri` 的曲目（2026-11-16 晚用户报「封面怎么是白色」后新增）。
+     *
+     * 用于**封面自愈**：数据库里的 `coverUri` 可能指向一个已经被删掉的文件（换包、
+     * 清缓存、系统清应用数据都会），而 [tracksMissingCover] 只挑 `coverUri IS NULL`
+     * 的条目，这些「有 URI 但文件没了」的曲目永远不会被重新提取，只能一直白着。
+     * 默认空实现，纯 JVM 测试的 FakeStore 不用关心。
+     */
+    suspend fun tracksWithCover(limit: Int): List<Track> = emptyList()
+
+    /** 把这些曲目的 `coverUri` 清空，好让封面预热重新提取一次。 */
+    suspend fun clearCover(ids: List<String>) = Unit
 }

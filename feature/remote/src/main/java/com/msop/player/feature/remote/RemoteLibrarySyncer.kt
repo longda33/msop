@@ -3,12 +3,23 @@ package com.msop.player.feature.remote
 import com.msop.player.core.common.log.AppLog
 import com.msop.player.core.database.dao.TrackDao
 import com.msop.player.core.database.mapper.toEntity
+import com.msop.player.core.datastore.ServerConfig
 import com.msop.player.core.datastore.ServerConfigStore
 import com.msop.player.core.model.SourceType
 import com.msop.player.core.model.Track
 import com.msop.player.core.network.OpenListClient
+import com.msop.player.core.network.OpenListException
+import com.msop.player.core.network.RemoteDurationProbe
+import com.msop.player.core.network.ServerUrl
 import com.msop.player.core.network.SubsonicClient
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -19,13 +30,22 @@ data class RemoteSyncStats(
     val deleted: Int = 0,
     val directories: Int = 0,
     val elapsedMs: Long = 0L,
-    /** 被 Subsonic 元数据补全（艺术家/专辑/封面）的曲目数；没配应用密钥时为 0。 */
+    /** 被 Subsonic 元数据补全（艺术家/专辑/封面/时长）的曲目数；没配应用密钥时为 0。 */
     val enriched: Int = 0,
+    /** 列目录失败的目录数：跳过这些目录后同步照常完成。 */
+    val skippedDirs: Int = 0,
+    /** 去重丢掉的重复条目数（同名跨目录 / flac+m4a 双版本）。 */
+    val deduped: Int = 0,
+    /** 参与本次同步的服务器台数。 */
+    val servers: Int = 1,
 ) {
     val summary: String
         get() = buildString {
             append("扫描 $scanned 项 · 写入 $tracks 首")
+            if (servers > 1) append(" · $servers 台服务器")
             if (enriched > 0) append(" · 补全 $enriched 首")
+            if (deduped > 0) append(" · 去重 $deduped 首")
+            if (skippedDirs > 0) append(" · 跳过 $skippedDirs 个异常目录")
             append(" · 清理 $deleted 条 · $elapsedMs ms")
         }
 }
@@ -33,12 +53,15 @@ data class RemoteSyncStats(
 /**
  * 把 OpenList 上的音频同步进统一的 `tracks` 表（P3-03）。
  *
+ * 2026-11-16 晚起支持**多台同时启用**：遍历 `enabledConfigs()`，每台的曲目
+ * `id` / `uri` 都带 profile 前缀，播放时由 uri 里的 profile 决定换哪一台的直链。
+ * 跨服务器同名歌曲最后统一走 [RemoteDeduper] 收敛成一条。
+ *
  * 用 BFS 而不是递归：目录层级可能很深，递归在协程里容易爆栈。
- * 每条 Track 的 `uri` 是稳定的 `openlist:/路径`，播放时才由解析器换成直链。
  *
  * **只清理 OPENLIST 来源的幽灵条目**，绝不能动本地曲目——`idsBySource`
- * 就是为此存在的。另有一条安全阀：一个远程文件都没扫到时跳过清理，
- * 因为那多半是配置错误或网络故障，照常差集等于清空远程曲库。
+ * 就是为此存在的。安全阀：一个远程文件都没扫到时跳过清理，因为那多半是
+ * 配置错误或网络故障，照常差集等于清空远程曲库。
  */
 @Singleton
 class RemoteLibrarySyncer @Inject constructor(
@@ -51,49 +74,96 @@ class RemoteLibrarySyncer @Inject constructor(
     suspend fun sync(onProgress: suspend (Int) -> Unit = {}): RemoteSyncStats =
         withContext(Dispatchers.IO) {
             val started = System.currentTimeMillis()
-            val nowSeconds = System.currentTimeMillis() / 1000L
-            val found = LinkedHashMap<String, Track>()
-            val pendingDirs = ArrayDeque<String>()
-            pendingDirs.add("/")
+            val nowSeconds = started / 1000L
 
-            var scanned = 0
-            var directories = 0
-            var pages = 0
+            val configs = configStore.enabledConfigs().ifEmpty {
+                configStore.activeConfig()?.let { listOf(it) }.orEmpty()
+            }.filter { it.configured }
+            if (configs.isEmpty()) throw OpenListException.NotConfigured()
 
-            while (pendingDirs.isNotEmpty() && pages < MAX_PAGES) {
-                val dir = pendingDirs.removeFirst()
-                directories++
-                var page = 1
-                while (pages < MAX_PAGES) {
-                    val data = client.list(dir, page, PAGE_SIZE)
-                    val items = data.content.orEmpty()
-                    pages++
+            val raw = LinkedHashMap<String, Track>()
+            // 并发扫描下计数必须原子，否则「扫描 N 项 / 目录 M 个」会漏数
+            val scanned = AtomicInteger()
+            val directories = AtomicInteger()
+            val pages = AtomicInteger()
+            val skipped = AtomicInteger()
 
-                    items.forEach { item ->
-                        scanned++
-                        val childPath = RemoteIdFactory.join(dir, item.name)
-                        when {
-                            item.isDir -> pendingDirs.add(childPath)
-                            RemoteIdFactory.isAudio(item.name) -> {
-                                val track = RemoteTrackMapper.toTrack(item, childPath, nowSeconds)
-                                found[track.id] = track
+            configs.forEach { config ->
+                val perProfile = LinkedHashMap<String, Track>()
+                val pendingDirs = ArrayDeque<String>()
+                pendingDirs.add(normalizeRoot(config.rootPath))
+                // 2026-11-16 晚用户需求：配置页可填「请求并发数」，不填用默认 4。
+                // 按层并行：同一层的目录一起列，信号量把同时在飞的请求压到并发数以内；
+                // 单个目录仍逐页顺序翻（OpenList 的分页游标不保证乱序安全）。
+                val parallel = config.effectiveConcurrency
+                val gate = Semaphore(parallel)
+                val mapLock = Any()
+
+                while (pendingDirs.isNotEmpty() && pages.get() < MAX_PAGES) {
+                    val batch = pendingDirs.toList()
+                    pendingDirs.clear()
+                    coroutineScope {
+                        batch.map { dir ->
+                            async {
+                                gate.withPermit {
+                                    directories.incrementAndGet()
+                                    var page = 1
+                                    while (pages.get() < MAX_PAGES) {
+                                        // 单个目录列目录失败（缺权限、挂载点异常、服务端 500）不能拖垮整次同步，
+                                        // 跳过它继续扫别的目录；但 401/403 是鉴权问题，必须原样抛出。
+                                        val data = try {
+                                            client.listBlockingWith(config, dir, page, PAGE_SIZE)
+                                        } catch (e: OpenListException.Auth) {
+                                            throw e
+                                        } catch (e: OpenListException.NotConfigured) {
+                                            throw e
+                                        } catch (e: CancellationException) {
+                                            throw e
+                                        } catch (e: Exception) {
+                                            AppLog.w("列目录失败，跳过 ${config.id}:$dir: ${e.message}")
+                                            skipped.incrementAndGet()
+                                            break
+                                        }
+                                        val items = data.content.orEmpty()
+                                        pages.incrementAndGet()
+
+                                        items.forEach { item ->
+                                            synchronized(mapLock) {
+                                                scanned.incrementAndGet()
+                                                val childPath = RemoteIdFactory.join(dir, item.name)
+                                                when {
+                                                    item.isDir -> pendingDirs.add(childPath)
+                                                    RemoteIdFactory.isAudio(item.name) -> {
+                                                        val track = RemoteTrackMapper.toTrack(
+                                                            item = item,
+                                                            profileId = config.id,
+                                                            path = childPath,
+                                                            nowSeconds = nowSeconds,
+                                                        )
+                                                        perProfile[track.id] = track
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        onProgress(raw.size + perProfile.size)
+
+                                        if (items.size < PAGE_SIZE || page * PAGE_SIZE >= data.total) break
+                                        page++
+                                    }
+                                }
                             }
-                        }
+                        }.awaitAll()
                     }
-                    onProgress(found.size)
-
-                    // total 是**当前目录**的条目总数，不是全库的
-                    if (items.size < PAGE_SIZE || page * PAGE_SIZE >= data.total) break
-                    page++
                 }
+                raw.putAll(perProfile)
             }
 
-            // Subsonic 元数据补全（可选）：真实艺术家/专辑/封面。失败只降级，不阻断同步
+            // Subsonic 元数据补全（可选）：真实艺术家/专辑/封面/时长。失败只降级，不阻断同步
             var enriched = 0
-            if (found.isNotEmpty() && subsonic.isConfigured()) {
+            if (raw.isNotEmpty() && subsonic.isConfigured()) {
                 runCatching {
                     val index = SubsonicMetadata.index(subsonic.allSongs())
-                    found.replaceAll { _, track ->
+                    raw.replaceAll { _, track ->
                         val meta = index[SubsonicMetadata.fileNameOfTrack(track)]
                         val updated = SubsonicMetadata.enrich(track, meta) { id ->
                             subsonic.coverArtUrl(id)
@@ -106,27 +176,102 @@ class RemoteLibrarySyncer @Inject constructor(
                 }
             }
 
+            val (tracks, deduped) = RemoteDeduper.dedupe(raw.values)
+            // 服务端列目录不给时长，时长是客户端读完文件头算出来的；
+            // 重新同步不能把它清零，否则每次同步都要重新探测一遍（83 首约几十次请求）
+            val previous = dao.bySource(SourceType.OPENLIST).associateBy { it.id }
+            val merged = tracks.map { track ->
+                val kept = previous[track.id]?.durationMs ?: 0L
+                if (track.durationMs <= 0L && kept > 0L) track.copy(durationMs = kept) else track
+            }
+            val found = merged.associateBy { it.id }
             val stale = dao.idsBySource(SourceType.OPENLIST).toSet() - found.keys
             if (found.isNotEmpty()) {
                 if (stale.isNotEmpty()) dao.deleteByIds(stale.toList())
                 dao.upsertAll(found.values.map { it.toEntity() })
-                configStore.markSynced(found.size)
+                // 按 profile 分别记「已同步 N 首」，不能用总数覆盖——否则每行都显示合并后的总量
+                configs.forEach { config ->
+                    val own = found.values.count { track ->
+                        ServerUrl.parseInternalUri(track.uri)?.profileId == config.id
+                    }
+                    configStore.markSynced(config.id, own)
+                }
             }
 
             RemoteSyncStats(
-                scanned = scanned,
+                scanned = scanned.get(),
                 tracks = found.size,
                 deleted = if (found.isEmpty()) 0 else stale.size,
-                directories = directories,
+                directories = directories.get(),
                 elapsedMs = System.currentTimeMillis() - started,
                 enriched = enriched,
+                skippedDirs = skipped.get(),
+                deduped = deduped,
+                servers = configs.size,
             )
         }
 
-    /** 清除服务器配置时一并清掉远程曲目，避免留下一堆打不开的条目。 */
+    /**
+     * 给还没有时长的云端曲目补时长（后台跑，不挡同步结果）。
+     *
+     * 这台 OpenList 的 OpenSubsonic 实现不返回 `duration`（实测 `search3` /
+     * `getSong` / `getAlbum` 三处都没有），所以只能拿直链读文件头自己算，
+     * 见 [RemoteDurationProbe]。跑一批就写库一次，曲库列表会跟着刷新。
+     */
+    suspend fun fillMissingDurations(limit: Int = 300): Int = withContext(Dispatchers.IO) {
+        val configs = configStore.enabledConfigs()
+        if (configs.isEmpty()) return@withContext 0
+        val pending = dao.needingMetadata(SourceType.OPENLIST, limit)
+        val filled = AtomicInteger()
+        // 探测也是网络请求，跟着配置页的「请求并发数」走（默认 4）
+        val gate = Semaphore(configs.maxOf { it.effectiveConcurrency })
+        coroutineScope {
+            pending.map { entity ->
+                async {
+                    gate.withPermit {
+                        val parsed = ServerUrl.parseInternalUri(entity.uri) ?: return@withPermit
+                        val config = parsed.profileId
+                            ?.let { id -> configs.firstOrNull { it.id == id } }
+                            ?: configs.first()
+                        val url = runCatching {
+                            client.rawUrlBlocking(config, parsed.path)
+                        }.getOrNull() ?: return@withPermit
+                        val duration = RemoteDurationProbe.durationMs(url, fileSize = entity.sizeBytes)
+                        if (duration != null && duration > 0L) {
+                            dao.upsertAll(listOf(entity.copy(durationMs = duration)))
+                            filled.incrementAndGet()
+                        }
+                    }
+                }
+            }.awaitAll()
+        }
+        filled.get()
+    }
+
+    /** 只清掉某台服务器的曲目（取消启用或删除配置时用）。 */    suspend fun clearRemote(profileId: String?, keep: Collection<String> = emptyList()) =
+        withContext(Dispatchers.IO) {
+            val prefix = profileId?.let { "openlist:$it:" }
+            val ids = dao.idsBySource(SourceType.OPENLIST).filter { id ->
+                when {
+                    prefix != null -> id.startsWith(prefix)
+                    else -> true
+                } && id !in keep
+            }
+            if (ids.isNotEmpty()) dao.deleteByIds(ids)
+        }
+
+    /** 清除全部 OpenList 配置时一并清掉远程曲目，避免留下一堆打不开的条目。 */
     suspend fun clearRemote() = withContext(Dispatchers.IO) {
         dao.deleteBySource(SourceType.OPENLIST)
         configStore.markSynced(0)
+    }
+
+    /** 把用户填的音乐目录规整成 OpenList 的绝对路径形式，空串退回根目录。 */
+    private fun normalizeRoot(raw: String): String {
+        if (raw.isBlank()) return "/"
+        val cleaned = raw.trim().replace('\\', '/').trimEnd('/')
+        if (cleaned.isEmpty()) return "/"
+        return if (cleaned.startsWith("/")) cleaned else "/$cleaned"
     }
 
     private companion object {

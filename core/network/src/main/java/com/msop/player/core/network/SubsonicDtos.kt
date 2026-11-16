@@ -57,4 +57,10 @@ data class SubsonicSong(
     @SerialName("artistId") val artistId: String? = null,
     /** 标准字段，但这台服务器不返回（恒为 null）。 */
     val duration: Long? = null,
+    /** 码率（kbps）。OpenSubsonic 扩展字段，服务器不返回时为 null。 */
+    @SerialName("bitRate") val bitRate: Int? = null,
+    /** 采样率（Hz）。 */
+    @SerialName("samplingRate") val samplingRate: Int? = null,
+    /** 位深（bit）。有损格式通常没有。 */
+    @SerialName("bitDepth") val bitDepth: Int? = null,
 )

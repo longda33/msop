@@ -131,6 +131,8 @@ class MediaStoreTrackSource(
         val absolutePath = dataPath ?: fallbackPath(relativePath, displayName)
 
         val albumIdValue = cursor.longOrZero(MediaStore.Audio.Media.ALBUM_ID)
+        val sizeBytes = cursor.longOrZero(MediaStore.Audio.Media.SIZE)
+        val durationMs = cursor.longOrZero(MediaStore.Audio.Media.DURATION)
 
         return Track(
             id = TrackIdFactory.localId(absolutePath),
@@ -141,13 +143,17 @@ class MediaStoreTrackSource(
             artist = cursor.stringOrNull(MediaStore.Audio.Media.ARTIST).clean(),
             album = cursor.stringOrNull(MediaStore.Audio.Media.ALBUM).clean(),
             albumId = if (albumIdValue > 0L) albumIdValue.toString() else null,
-            durationMs = cursor.longOrZero(MediaStore.Audio.Media.DURATION),
+            durationMs = durationMs,
             trackNo = cursor.intOrNull(MediaStore.Audio.Media.TRACK),
             discNo = null,
             year = cursor.intOrNull(MediaStore.Audio.Media.YEAR),
             coverUri = null,
-            sizeBytes = cursor.longOrZero(MediaStore.Audio.Media.SIZE),
+            sizeBytes = sizeBytes,
             mimeType = cursor.stringOrNull(MediaStore.Audio.Media.MIME_TYPE).clean(),
+            // 平均码率 = 字节数 × 8 / 毫秒，单位正好是 kbps；采样率/位深由补齐流程用 MediaExtractor 填。
+            bitrateKbps = averageBitrateKbps(sizeBytes, durationMs),
+            sampleRateHz = null,
+            bitDepth = null,
             localPath = absolutePath,
             // 单位：秒。与 ScanContract 的 since 保持一致。
             lastModified = cursor.longOrZero(MediaStore.Audio.Media.DATE_MODIFIED),
@@ -159,6 +165,12 @@ class MediaStoreTrackSource(
         TrackIdFactory.normalizePath(
             listOfNotNull("/storage/emulated/0", relativePath, displayName).joinToString("/"),
         )
+
+    /** 字节 × 8 / 毫秒 = kbps，对 CBR/VBR 都是平均码率。 */
+    private fun averageBitrateKbps(sizeBytes: Long, durationMs: Long): Int? {
+        if (sizeBytes <= 0L || durationMs <= 0L) return null
+        return (sizeBytes * 8L / durationMs).toInt().takeIf { it > 0 }
+    }
 }
 
 private fun Cursor.columnIndexOrNull(column: String): Int? =

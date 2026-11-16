@@ -40,9 +40,13 @@ class SubsonicClient @Inject constructor(
         .callTimeout(35, TimeUnit.SECONDS)
         .build()
 
-    fun isConfigured(): Boolean = configStore.load()?.let {
-        it.configured && it.appKey.isNotBlank()
-    } == true
+    /**
+     * 是否能用 Subsonic 元数据：任意一条**已启用或已保存**的配置带应用密钥就算。
+     *
+     * 多台同时启用时，元数据只认一台（第一台填了密钥的）——`search3` 的索引是
+     * 整库级的，按文件名匹配，不需要每台各拉一遍。
+     */
+    fun isConfigured(): Boolean = candidateConfig() != null
 
     /** 连通性测试：ping + 取一页歌曲，返回库里的歌曲总数。 */
     fun testConnectionBlocking(): Int {
@@ -147,9 +151,14 @@ class SubsonicClient @Inject constructor(
         }
     }
 
+    private fun candidateConfig(): ServerConfig? {
+        val usable = { c: ServerConfig -> c.configured && c.appKey.isNotBlank() }
+        return configStore.enabledConfigs().firstOrNull(usable)
+            ?: configStore.profiles().firstOrNull(usable)
+    }
+
     private fun requireConfig(): ServerConfig =
-        configStore.load()?.takeIf { it.configured && it.appKey.isNotBlank() }
-            ?: throw OpenListException.NotConfigured()
+        candidateConfig() ?: throw OpenListException.NotConfigured()
 
     private companion object {
         const val REST_PREFIX = "@rest"

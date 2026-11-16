@@ -1,0 +1,585 @@
+package com.msop.player.ui.components
+
+import android.os.Build
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.EaseOut
+import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.VisibilityThreshold
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.util.fastCoerceIn
+import androidx.compose.ui.util.fastRoundToInt
+import androidx.compose.ui.util.lerp
+import com.kyant.backdrop.Backdrop
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.backdrop.drawBackdrop
+import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.effects.vibrancy
+import com.kyant.backdrop.highlight.Highlight
+import com.kyant.backdrop.shadow.InnerShadow
+import com.kyant.backdrop.shadow.Shadow
+import com.msop.player.ui.glass.DampedDragAnimation
+import com.msop.player.ui.glass.InteractiveHighlight
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.sign
+
+/*
+ * 移植自 ShuYin（power690/ShuYin，GPL-3.0）ui/LiquidGlass.kt 的 LiquidGlassNavBar。
+ * 用户 2026-11-14 明确授权直接复制 ShuYin 代码（本项目开源）。
+ * 改动仅限：包名、去掉 i18n（label 直接用字符串）；玻璃参数/结构/交互照抄。
+ *
+ * 视觉要点（此前反复出问题的答案都在这）：
+ * - 字色是纯黑/纯白（isLightTheme ? Color.Black : Color.White），不是灰色系；
+ * - 垫色浅色 0xFFFAFAFA.copy(0.55f)、深色 0xFF121212.copy(0.60f)，随主题，浅色不发黑；
+ * - 圆角 30dp、高 62dp、横 padding 20dp、最大宽 520dp；blur 8/14dp + lens 24dp。
+ */
+
+internal val LiquidGlassEnabled: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+internal val LiquidGlassMidEffects: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+internal val LiquidGlassFullEffects: Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+
+internal val LocalLiquidGlassTabScale =
+    staticCompositionLocalOf { { 1f } }
+
+@Composable
+fun LiquidGlassNavBar(
+    backdrop: Backdrop,
+    tabs: List<Pair<ImageVector, String>>,
+    selectedTabIndex: () -> Int,
+    onTabSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    forceFrosted: Boolean = false,
+    onTabReselected: (Int) -> Unit = {}
+) {
+    val barShape = RoundedCornerShape(30.dp)
+    val pillShape = RoundedCornerShape(26.dp)
+    val isLightTheme = MaterialTheme.colorScheme.surface.luminance() >= 0.5f
+    val contentColor = if (isLightTheme) Color.Black else Color.White
+    val fullEffects = !forceFrosted && LiquidGlassFullEffects
+    val midEffects = forceFrosted || LiquidGlassMidEffects
+    val selectedContentColor = MaterialTheme.colorScheme.primary
+    val containerColor =
+        if (LiquidGlassMidEffects) {
+            // 2026-11-16 晚用户指令「导航栏窗口背景透明度太高，改成和 ShuYin 一样」：
+            // 与 MiniPlayer 同一档垫色（浅 0.72 / 深 0.74），透出背景但不糊成白片。
+            if (isLightTheme) Color(0xFFFAFAFA).copy(0.72f)
+            else Color(0xFF121212).copy(0.74f)
+        } else {
+            MaterialTheme.colorScheme.surface
+        }
+
+    val tabsBackdrop = rememberLayerBackdrop()
+
+    BoxWithConstraints(
+        modifier
+            .padding(horizontal = 20.dp)
+            .widthIn(max = 520.dp),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        val density = LocalDensity.current
+        val tabWidth = with(density) {
+            (constraints.maxWidth.toFloat() - 8.dp.toPx()) / tabs.size
+        }
+        val maxStretchPx = with(density) { 22.dp.toPx() }
+
+        val offsetAnimation = remember { Animatable(0f) }
+        val panelOffset by remember(density) {
+            derivedStateOf {
+                val fraction = (offsetAnimation.value / constraints.maxWidth).fastCoerceIn(-1f, 1f)
+                with(density) {
+                    4.dp.toPx() * fraction.sign * EaseOut.transform(abs(fraction))
+                }
+            }
+        }
+
+        val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
+        val animationScope = rememberCoroutineScope()
+        val stretchOffset = remember {
+            Animatable(Offset.Zero, Offset.VectorConverter, Offset.VisibilityThreshold)
+        }
+        var virtualStretch by remember { mutableFloatStateOf(0f) }
+        var virtualStretchY by remember { mutableFloatStateOf(0f) }
+        val stretchScope = rememberCoroutineScope()
+        val stretchSpring = spring(
+            dampingRatio = 0.3f,
+            stiffness = 380f,
+            visibilityThreshold = Offset.VisibilityThreshold
+        )
+        var currentIndex by remember { mutableIntStateOf(selectedTabIndex()) }
+        val currentOnTabReselected by rememberUpdatedState(onTabReselected)
+        // 2026-11-16 晚 BUGFIX（用户报「搜索/设置界面按返回，界面回到音乐库但导航栏按钮还在原位」）：
+        // 这里原来把 `selectedTabIndex`（每次重组新建的 lambda）直接塞进 `LaunchedEffect(Unit)`，
+        // 协程捕获的是**首次组合**那个实例，它闭包里的 `currentDestination` 永远是旧值，
+        // 所以系统返回（popBackStack）改了当前路由也读不到，滑块只跟着点击走。
+        // 用 rememberUpdatedState 持有最新 lambda，才能在外部导航时读到新下标。
+        val latestSelectedIndex by rememberUpdatedState(selectedTabIndex)
+        val currentOnTabSelected by rememberUpdatedState(onTabSelected)
+        val dampedDragAnimation = remember(animationScope) {
+            var dragMoved = false
+            DampedDragAnimation(
+                animationScope = animationScope,
+                initialValue = selectedTabIndex().toFloat(),
+                valueRange = 0f..(tabs.size - 1).toFloat(),
+                visibilityThreshold = 0.001f,
+                initialScale = 1f,
+                pressedScale = 66f / 54f,
+                onDragStarted = { dragMoved = false },
+                onDragStopped = {
+                    val targetIndex = targetValue.fastRoundToInt().fastCoerceIn(0, tabs.size - 1)
+                    if (!dragMoved && targetIndex == currentIndex) {
+                        currentOnTabReselected(targetIndex)
+                    } else if (targetIndex != currentIndex) {
+                        currentIndex = targetIndex
+                        currentOnTabSelected(targetIndex)
+                    }
+                    virtualStretch = 0f
+                    virtualStretchY = 0f
+                    animateToValue(targetIndex.toFloat())
+                    animationScope.launch {
+                        offsetAnimation.animateTo(
+                            0f,
+                            spring(0.55f, 480f, 0.5f)
+                        )
+                    }
+                    stretchScope.launch {
+                        stretchOffset.animateTo(Offset.Zero, stretchSpring)
+                    }
+                },
+                onDrag = { _, dragAmount ->
+                    if (dragAmount != Offset.Zero) dragMoved = true
+                    val delta = dragAmount.x / tabWidth * if (isLtr) 1f else -1f
+                    val virtual = targetValue + virtualStretch + delta
+                    val clamped = virtual.fastCoerceIn(0f, (tabs.size - 1).toFloat())
+                    val overflowPx = (virtual - clamped) * tabWidth
+                    val cappedPx = maxStretchPx * overflowPx / (maxStretchPx + abs(overflowPx))
+                    virtualStretch = cappedPx / tabWidth
+                    updateValue(clamped)
+                    virtualStretchY += dragAmount.y
+                    val cappedY = maxStretchPx * virtualStretchY / (maxStretchPx + abs(virtualStretchY))
+                    val stretchPx = cappedPx * (if (isLtr) 1f else -1f)
+                    stretchScope.launch {
+                        stretchOffset.snapTo(Offset(stretchPx, cappedY))
+                    }
+                    animationScope.launch {
+                        offsetAnimation.snapTo(offsetAnimation.value + dragAmount.x)
+                    }
+                }
+            )
+        }
+        LaunchedEffect(dampedDragAnimation) {
+            // 只跟随「外部导航」：返回键 pop 回某个 Tab、或别处 navigate 换了路由时，
+            // 把滑块搬到新下标。这里**不再回调 onTabSelected**——导航已经发生了，
+            // 再 navigate 一次会和 popBackStack 打架（旧实现在这里回跳，导致滑块不动）。
+            snapshotFlow { latestSelectedIndex() }
+                .collectLatest { index ->
+                    if (index != currentIndex) {
+                        currentIndex = index
+                        dampedDragAnimation.animateToValue(index.toFloat())
+                    }
+                }
+        }
+
+        val interactiveHighlight = remember(animationScope) {
+            InteractiveHighlight(
+                animationScope = animationScope,
+                position = { size, _ ->
+                    val spill = stretchOffset.value.x * 0.5f
+                    val spillY = stretchOffset.value.y * 0.5f
+                    Offset(
+                        if (isLtr) (dampedDragAnimation.value + 0.5f) * tabWidth + panelOffset + spill
+                        else size.width - (dampedDragAnimation.value + 0.5f) * tabWidth + panelOffset + spill,
+                        size.height / 2f + spillY
+                    )
+                }
+            )
+        }
+
+        val selectorPosition = remember(dampedDragAnimation) {
+            { dampedDragAnimation.value }
+        }
+
+        val tabsContent: @Composable RowScope.() -> Unit = {
+            tabs.forEachIndexed { index, tab ->
+                LiquidGlassNavBarTab(
+                    onClick = {
+                        if (index == currentIndex) {
+                            onTabReselected(index)
+                        } else {
+                            // 点击是唯一需要主动 navigate 的入口：先换下标让滑块立刻动，
+                            // 再通知外部导航（外部导航成功后 selectedTabIndex 会等于这个下标，
+                            // 上面的 snapshotFlow 不会重复触发）。
+                            currentIndex = index
+                            currentOnTabSelected(index)
+                            animationScope.launch {
+                                dampedDragAnimation.animateToValue(index.toFloat())
+                            }
+                        }
+                    },
+                    icon = tab.first,
+                    label = tab.second,
+                    index = index,
+                    contentColor = contentColor,
+                    selectedColor = selectedContentColor,
+                    selectorPosition = selectorPosition
+                )
+            }
+        }
+
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(62.dp)
+                .graphicsLayer {
+                    val ox = stretchOffset.value.x
+                    val oy = stretchOffset.value.y
+                    val growX = (abs(ox) / size.width).coerceIn(0f, 0.04f)
+                    val growY = (abs(oy) / (size.height * 1.1f)).coerceIn(0f, 0.32f)
+                    translationX = ox * 0.25f
+                    translationY = oy * 0.32f
+                    scaleX = (1f + growX) * (1f - growY * 0.45f)
+                    scaleY = (1f - growX * 2f) * (1f + growY)
+                    val horizontalDominant = abs(ox) > abs(oy)
+                    transformOrigin = TransformOrigin(
+                        when {
+                            horizontalDominant && ox >= 0f -> 0f
+                            horizontalDominant -> 1f
+                            else -> 0.5f
+                        },
+                        when {
+                            !horizontalDominant && oy >= 0f -> 0f
+                            !horizontalDominant -> 1f
+                            else -> 0.5f
+                        }
+                    )
+                },
+            contentAlignment = Alignment.CenterStart
+        ) {
+        Row(
+            Modifier
+                .graphicsLayer {
+                    translationX = panelOffset
+                }
+                .drawBackdrop(
+                    backdrop = backdrop,
+                    shape = { barShape },
+                    effects = {
+                        vibrancy()
+                        blur(if (fullEffects) 8.dp.toPx() else 14.dp.toPx())
+                        if (fullEffects) {
+                            lens(24.dp.toPx(), 24.dp.toPx())
+                        }
+                    },
+                    layerBlock = {
+                        val progress = dampedDragAnimation.pressProgress
+                        val scale = lerp(1f, 1f + 6.dp.toPx() / size.width, progress)
+                        scaleX = scale
+                        scaleY = scale
+                    },
+                    onDrawSurface = { drawRect(containerColor) }
+                )
+                .then(interactiveHighlight.modifier)
+                .height(62.dp)
+                .fillMaxWidth()
+                .padding(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            content = tabsContent
+        )
+
+        CompositionLocalProvider(
+            LocalLiquidGlassTabScale provides {
+                lerp(1f, 1.2f, dampedDragAnimation.pressProgress)
+            }
+        ) {
+            Row(
+                Modifier
+                    .clearAndSetSemantics {}
+                    .alpha(0f)
+                    .layerBackdrop(tabsBackdrop)
+                    .graphicsLayer {
+                        translationX = panelOffset
+                    }
+                    .drawBackdrop(
+                        backdrop = backdrop,
+                        shape = { barShape },
+                        effects = {
+                            val progress = dampedDragAnimation.pressProgress
+                            vibrancy()
+                            blur(if (fullEffects) 8.dp.toPx() else 14.dp.toPx())
+                            if (fullEffects) {
+                                lens(24.dp.toPx() * progress, 24.dp.toPx() * progress)
+                            }
+                        },
+                        highlight = {
+                            val progress = dampedDragAnimation.pressProgress
+                            Highlight.Default.copy(alpha = progress)
+                        },
+                        onDrawSurface = { drawRect(containerColor) }
+                    )
+                    .then(interactiveHighlight.modifier)
+                    .height(54.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                content = tabsContent
+            )
+        }
+
+        Box(
+            Modifier
+                .padding(horizontal = 4.dp)
+                .graphicsLayer {
+                    translationX =
+                        (if (isLtr) dampedDragAnimation.value * tabWidth + panelOffset
+                        else size.width - (dampedDragAnimation.value + 1f) * tabWidth + panelOffset) +
+                                stretchOffset.value.x * 0.5f
+                    translationY = stretchOffset.value.y * 0.55f
+                }
+                .then(interactiveHighlight.gestureModifier)
+                .then(dampedDragAnimation.modifier)
+                .drawBackdrop(
+                    backdrop = rememberCombinedBackdrop(backdrop, tabsBackdrop),
+                    shape = { pillShape },
+                    effects = {
+                        val progress = dampedDragAnimation.pressProgress
+                        if (fullEffects) {
+                            lens(
+                                10.dp.toPx() * progress,
+                                14.dp.toPx() * progress,
+                                chromaticAberration = true
+                            )
+                        } else if (midEffects) {
+                            vibrancy()
+                        }
+                    },
+                    highlight = {
+                        val progress = dampedDragAnimation.pressProgress
+                        Highlight.Default.copy(alpha = progress)
+                    },
+                    shadow = {
+                        val progress = dampedDragAnimation.pressProgress
+                        Shadow(alpha = progress)
+                    },
+                    innerShadow = {
+                        val progress = dampedDragAnimation.pressProgress
+                        InnerShadow(
+                            radius = 8.dp * progress,
+                            alpha = progress
+                        )
+                    },
+                    layerBlock = {
+                        scaleX = dampedDragAnimation.scaleX
+                        scaleY = dampedDragAnimation.scaleY
+                        val velocity = dampedDragAnimation.velocity / 10f
+                        scaleX /= 1f - (velocity * 0.75f).fastCoerceIn(-0.05f, 0.05f)
+                        scaleY *= 1f - (velocity * 0.25f).fastCoerceIn(-0.05f, 0.05f)
+                        val stretchX = (abs(stretchOffset.value.x) / size.width).coerceIn(0f, 1f)
+                        val stretchY = (abs(stretchOffset.value.y) / size.height).coerceIn(0f, 1f)
+                        scaleX *= (1f + stretchX * 0.55f) * (1f - stretchY * 0.3f)
+                        scaleY *= (1f - stretchX * 0.28f) * (1f + stretchY * 0.5f)
+                    },
+                    onDrawSurface = {
+                        val progress = dampedDragAnimation.pressProgress
+                        drawRect(
+                            if (isLightTheme) Color.Black.copy(0.1f)
+                            else Color.White.copy(0.1f),
+                            alpha = 1f - progress
+                        )
+                        drawRect(Color.Black.copy(alpha = 0.03f * progress))
+                    }
+                )
+                .height(54.dp)
+                .fillMaxWidth(1f / tabs.size)
+        )
+        }
+    }
+}
+
+@Composable
+private fun RowScope.LiquidGlassNavBarTab(
+    onClick: () -> Unit,
+    icon: ImageVector,
+    label: String,
+    index: Int,
+    contentColor: Color,
+    selectedColor: Color,
+    selectorPosition: () -> Float
+) {
+    val scale = LocalLiquidGlassTabScale.current
+    val pillClipPath = remember { Path() }
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(26.dp))
+            .clickable(
+                interactionSource = null,
+                indication = null,
+                role = Role.Tab,
+                onClick = onClick
+            )
+            .fillMaxHeight()
+            .weight(1f)
+    ) {
+        NavBarTabContent(
+            icon = icon,
+            label = label,
+            color = contentColor,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    val tabScale = scale()
+                    scaleX = tabScale
+                    scaleY = tabScale
+                }
+        )
+        NavBarTabContent(
+            icon = icon,
+            label = label,
+            color = selectedColor,
+            modifier = Modifier
+                .matchParentSize()
+                .graphicsLayer {
+                    val tabScale = scale()
+                    scaleX = tabScale
+                    scaleY = tabScale
+                }
+                .drawWithContent {
+                    val delta = if (layoutDirection == LayoutDirection.Ltr) {
+                        selectorPosition() - index
+                    } else {
+                        index - selectorPosition()
+                    }
+                    if (delta > -1f && delta < 1f) {
+                        val tabWidthPx = size.width
+                        val rawLeft = delta * tabWidthPx
+                        val rawRight = rawLeft + tabWidthPx
+                        val left = rawLeft.coerceIn(0f, tabWidthPx)
+                        val right = rawRight.coerceIn(0f, tabWidthPx)
+                        if (right > left) {
+                            val maxRadius = minOf(
+                                26.dp.toPx(),
+                                size.height / 2f,
+                                (right - left) / 2f
+                            )
+                            val leftRadius = if (rawLeft > 0f) maxRadius else 0f
+                            val rightRadius = if (rawRight < tabWidthPx) maxRadius else 0f
+                            pillClipPath.reset()
+                            pillClipPath.addRoundRect(
+                                RoundRect(
+                                    left = left,
+                                    top = 0f,
+                                    right = right,
+                                    bottom = size.height,
+                                    topLeftCornerRadius = CornerRadius(leftRadius),
+                                    topRightCornerRadius = CornerRadius(rightRadius),
+                                    bottomRightCornerRadius = CornerRadius(rightRadius),
+                                    bottomLeftCornerRadius = CornerRadius(leftRadius)
+                                )
+                            )
+                            clipPath(pillClipPath) {
+                                this@drawWithContent.drawContent()
+                            }
+                        }
+                    }
+                }
+        )
+    }
+}
+
+@Composable
+private fun NavBarTabContent(
+    icon: ImageVector,
+    label: String,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    val labelStyle = MaterialTheme.typography.labelMedium
+    var labelFontSize by remember(label) { mutableStateOf(labelStyle.fontSize) }
+    var labelReady by remember(label) { mutableStateOf(false) }
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.size(22.dp)
+        )
+        Text(
+            text = label,
+            style = labelStyle,
+            color = color,
+            fontSize = labelFontSize,
+            maxLines = 1,
+            softWrap = false,
+            onTextLayout = { result ->
+                if (result.hasVisualOverflow && labelFontSize > 6.sp) {
+                    labelFontSize *= 0.9f
+                } else {
+                    labelReady = true
+                }
+            },
+            modifier = Modifier.alpha(if (labelReady) 1f else 0f)
+        )
+    }
+}

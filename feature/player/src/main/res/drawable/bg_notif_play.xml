@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 锁屏卡片中间的圆形播放键底（参考图里是浅色实心圆） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="#40FFFFFF" />
+</shape>

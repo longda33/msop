@@ -359,3 +359,224 @@ Subsonic（apiKey）  ──→  艺术家 / 专辑 / 专辑ID / contentType / �
    `shrinkResources` 连注册文件一起删。已改为在 `MsopApplication` 显式实现
    `SingletonImageLoader.Factory` 并 `add(OkHttpNetworkFetcherFactory())`（R8 能看到
    静态引用），`proguard-rules.pro` 里再 keep 一层兜底。
+
+---
+
+## 8. 2026-11-12 · P3-04 远程边播边缓存（SimpleCache）
+
+§6 定下的「raw_url 不入库、每次起播现换」在加了缓存之后要补一条：
+**缓存 key 只能用稳定的 `openlist:/路径`，绝不能用换出来的 raw_url**。
+后者带 tempauth，`/api/fs/get` 每次返回都不同，拿它当 key 的话同一首歌
+seek 一次就多一份缓存，永远命不中。
+
+### 8.1 DataSource 链的顺序（本任务最关键的一处）
+
+```
+DefaultMediaSourceFactory
+  └─ RoutingDataSource（按 scheme 分流）
+       ├─ 本地 content:// / file:// → DefaultDataSource（不缓存）
+       └─ 远程 openlist:/路径      → CacheDataSource
+                                      ├─ 读：FileDataSource
+                                      └─ 未命中：ResolvingDataSource
+                                           └─ DefaultDataSource(https raw_url)
+```
+
+`CacheDataSource` 必须**包在** `ResolvingDataSource` 外面：
+
+1. 它看到的是稳定的内部 URI，缓存 key 天然固定；
+2. 缓存全命中时根本不会 open upstream，连 `/api/fs/get` 都不用调，
+   二次播放是真正的「秒开 + 零 API 请求」；
+3. seek 到未缓存区间时，upstream 才去换一条新鲜直链，Range 请求照常生效。
+
+反过来把 `CacheDataSource` 放在里面（用 `DataSpec.key` 补救也行但更绕），
+就得对每个请求解析一次直链，缓存命中也要先付一次网络往返。
+
+### 8.2 「仅 Wi-Fi 缓存」的语义
+
+开关只限制**写**，不限制**读**：蜂窝下已缓存的内容照常从磁盘读（反而省流量），
+只是不再往磁盘写新内容。实现上是构造 `CacheDataSource` 时把写侧 `DataSink`
+传 `null`，Media3 会走只读路径（未命中时 `releaseHoleSpan` 后直接走网络）。
+
+判定用 `TRANSPORT_CELLULAR` 或「没有 `NET_CAPABILITY_NOT_METERED`」。
+**注意 Android SDK 里没有 `NET_CAPABILITY_METERED` 这个常量**（只有正向能力
+`NET_CAPABILITY_NOT_METERED`），第一版按记忆写了它，编译直接报 unresolved reference。
+
+查不到网络能力时放行：边播边缓存只是把正在下载的字节顺手落盘，不会比不缓存
+多耗一份流量；真正会烧流量的是主动预下载，本版本没做。
+
+### 8.3 其它约束
+
+- 本机曲目不进缓存：几百首本地文件会把 2 GB 配额挤空，读本地也没有流量问题。
+- `SimpleCache` 必须是**进程内单例**，Media3 用目录锁防止两个实例同时打开同一目录
+  把索引写坏；且不能随 `PlaybackService.onDestroy` release（服务会反复重建）。
+- 清理缓存用 `Cache.removeResource(key)` 而不是直接删文件，否则 SQLite 索引会
+  留下「说有、其实没了」的幽灵条目。
+- `docs/05` 走查清单里的「二次播放 < 1 秒」「切到蜂窝不自动缓存」需要在有设备的
+  环境里复验；本轮只做了编译、单测与 release 构建。
+
+### 8.4 真机复验步骤（有设备时照跑）
+
+```bash
+export MSYS_NO_PATHCONV=1
+DEV=127.0.0.1:5555
+
+# ① 播一首远程 FLAC 约 10 秒，看缓存目录确实长出文件
+adb -s $DEV shell run-as com.msop.player ls -l cache/media_cache/
+
+# ② 第一次播放应能看到「远程缓存未命中，换取新鲜直链」；
+#    退出重进同一首歌（命中缓存）时这条日志不应再出现
+adb -s $DEV logcat -s Msop:V | grep -E "远程缓存|缓存策略"
+
+# ③ 设置 → 存储，比较播放前后「远程播放缓存」的曲目数与占用字节
+
+# ④ 关掉 Wi-Fi 只留蜂窝，播一首没听过的远程歌：
+#    「远程缓存策略 ... 写入=false」，设置页占用数字不增长；
+#    再播一首已经缓存过的歌，仍能正常播放且不涨流量
+```
+
+缓存 key 的稳定性由 `MediaCachePolicyTest` 的 5 个 JVM 用例覆盖（同一路径 +
+不同 tempauth 必须得到同一个 key），这部分不需要设备即可回归。
+
+---
+
+## 9. 2026-11-16 · 多实例配置 + HTTP 明文 + 音乐目录（B 类任务）
+
+### 9.1 「多台」的语义：可保存多条，单选启用
+
+每类音源（OpenList / WebDAV）都能保存任意多条配置，但**同一时刻只有一条「启用中」**，
+`load()` 仍只返回 `activeConfig()`。因此：
+
+- 曲目 id 方案不变（`openlist:{sha1(path)}` / `webdav:{sha1(path)}`），不需要为每条
+  profile 建独立 id 空间，Room 迁移与播放解析都不用改；
+- 若改成「多台同时启用、曲库合并」，两台服务器上的同名路径会撞 id，必须先把 profile
+  前缀写进 id，属于另一规模的改造（未做，见 `AGENTS.md` 待办）；
+- 切换启用项或删除启用项时先 `syncer.clearRemote()` 再同步，否则旧来源的曲目会留在
+  曲库里（WebDAV 实测：187 首 → 3 首，切回再同步回到 187 首）。
+
+存储布局（`msop_openlist` / `msop_webdav` 两套 SharedPreferences，同构）：
+
+```
+profile_ids = "p1,p2,p3"        有序列表，决定列表顺序
+active_id   = "p1"              当前启用的那条
+p_{id}_name / _url / _user / _pass / _root / _appkey
+p_{id}_status / _status_msg / _status_at   OK / FAIL / UNTESTED + 人话文案 + 时间
+p_{id}_sync_count / _sync_at               每条 profile 各自的同步结果
+p_{id}_allow_http                          该条是否被用户明文确认过
+token_{id} / _token_profile                 JWT 缓存按 profile 分开，切换不串号
+```
+
+旧单配置键在 `init` 里一次性迁移成 `p1` 并写 `profiles_migrated=true`，旧键保留对照。
+
+### 9.2 音乐目录（`rootPath`）与坏目录跳过
+
+内网 OpenList 从 `/` 做全盘 BFS 时，`od-20200305` / `od-20200439` / `od-20200441`
+三个目录服务端直接返回 **HTTP 500**，整次同步会失败、曲库清零。两手修：
+
+1. 配置里加「音乐目录（可选）」，`RemoteLibrarySyncer.sync()` 从该目录起 BFS
+   （`normalizeRoot()` 规整前导/尾斜杠，空则根 `/`）。列表行会显示
+   `地址 · 音乐目录`，一眼看出这台指向哪个目录。
+2. `client.list` 单目录 try/catch：`Auth` / `NotConfigured` 原样抛出，其它异常只记
+   `AppLog.w` 并跳过该目录，`RemoteSyncStats.skippedDirs` 汇总进结果文案
+   （「跳过 N 个异常目录」）。
+
+### 9.3 HTTP 明文：系统层放开、拦在应用层（决策 D27）
+
+`network_security_config.xml` 的 base-config 从 `cleartextTrafficPermitted="false"` 改为
+`"true"`——network security config 是**静态的**，无法按用户运行时输入的域名动态放行，
+而内网自建服务器（`http://172.207.160.128:5244`）必须支持。
+
+真正的开关在应用层：每条配置有 `allowPlainHttp`，只有用户在保存 `http://` 时看到
+二次确认弹窗（`确认使用明文 HTTP？`，正文强调账号密码会裸奔）并点「仍然继续」才置
+`true`；`OpenListClient.requireConfig()` 与 `WebDavClient.ensureAllowed()` 见到 `http://`
+且标记为 false 直接抛 `PlainHttpNotConfirmed`，请求根本发不出去。地址不带协议时默认补
+`https://`，即默认仍优先加密。
+
+这是对 `AGENTS.md` 硬约束第 7 条的偏差，已记为 D27；`usesCleartextTraffic` 仍未开。
+
+### 9.4 真机验收（PGEM10 / Android 15 / 900×1600，2026-11-16）
+
+> **设备口径更正（2026-11-16 晚）**：这台「PGEM10」其实是**安卓模拟器**——
+> `ro.product.model=PGEM10` / `ro.hardware=OPPO` 是伪装值，`ro.kernel.qemu` /
+> `ro.boot.qemu` 被清空；但 `ping 10.0.2.2` 通（QEMU NAT 网关，`ttl=255`）可判定为模拟器。
+> 下文所有「真机」按模拟器理解。模拟器出网走宿主机代理 `10.0.2.2:10808`
+> （`adb shell settings put global http_proxy 10.0.2.2:10808`，**仅设备侧设置，不进项目代码**）。
+
+| # | 服务器 | 结果 |
+|---|---|---|
+| ① | OpenList koyeb `https://hon-willette-longke233-…koyeb.app` `/yd/music` | 配置已保存，`FAIL`：本设备解析到 `[::1]:443`（域名 `ping` 100% 丢包，非代码问题） |
+| ② | OpenList 内网 `http://172.207.160.128:5244` `/yd/musicweb` | `OK`，明文二次确认 → 同步 **60 首**，远程流播 `state=PLAYING(3)` |
+| ③ | WebDAV koyeb `/dav` `/yd` | 配置已保存，`FAIL`（同上，`[::1]:443`） |
+| ④ | WebDAV 内网 `http://172.207.160.128:5244/dav` `/cd18/Music` | `OK`，同步 **187 首**（扫描 219 项 / 8069 ms） |
+| ⑤ | WebDAV `https://dav.2dland.cn` `/` | `OK`，`连接成功，根路径下 3 项`，同步 **3 首**（275 ms） |
+
+列表 / 菜单 / 状态 / 删除都已跑过：行内 ⋮（编辑·测试连接·启用并同步·删除，启用项则是
+立即同步）、启用中徽章、`连接正常 · 已同步 N 首` + `曲库 N 首 · 上次同步 …`、删除非启用项
+不动曲库（OpenList 仍 60 首）、`清除全部`。PC 端另用
+`HttpClient` + `new HttpMethod('PROPFIND')` 复验了 5 台全部 200/207
+（`Invoke-WebRequest` 不支持 PROPFIND）。
+
+## 9.5 多台同时启用 + 时长/封面补全（模拟器 / 900×1600，2026-11-16 晚）
+
+| 项 | 结果 |
+|---|---|
+| 两台 OpenList 同时启用 | `profile_ids=p2,p3`，两台都「启用中」；同步汇总「扫描 103 项 · 写入 83 首 · 2 台服务器 · 补全 11 首 · 去重 5 首 · 清理 60 条 · 32907 ms」，各台计数独立（lan 60 首 / koyeb 23 首） |
+| 复同步 | 「清理 0 条 · 去重 5 首 · 26800 ms」，不清零计数 |
+| 跨服务器去重 | `RemoteDeduper` 按规范化标题合并（保留体积更大者）：OPENLIST `发如雪 (史诗版)` flac+m4a → 1 条；WEBDAV `你那么爱她` / `单车 李克勤` / `有你在 梁静茹` / `醉拳 (国语/粤语) 成龙` 各 2 → 1 |
+| 时长 | OpenSubsonic 完全不返回 `duration`（`search3` / `getSong` / `getAlbum` 的 song 无该字段、`album.duration` 恒 0）→ `RemoteDurationProbe` 用 `Range: bytes=0-65535` 读头字节：FLAC STREAMINFO / WAV fmt / MP3 Xing 或首帧 / M4A mvhd（moov 在尾部再取尾），OPENLIST 达 **83/83**；复同步靠 `TrackDao.bySource()` 合并旧 `durationMs>0`，不被 0 覆盖 |
+| 封面 | koyeb 机配 `OpenSubsonic apiKey`（`/@rest` 前缀）后补到 `covers|11`（该机索引只收 `/od-20200439/musicweb` 的 23 首，覆盖不全属服务端索引） |
+| WebDAV 时长 | 内网 WebDAV 182 首里只有 **53 首**拿到时长：宿主机直连该 `/dav` 对文件 `GET` 一律 **403**（`PROPFIND` 207、匿名 401），探测拿不到字节 → 疑为服务端限制（`dav.2dland.cn` 未复验） |
+| koyeb WebDAV | 仍 `FAIL`（设备内解析到 `[::1]:443`）；模拟器代理下未复验 |
+
+设备 `tracks` 分布（2026-11-16 12:0x）：**283 首 = LOCAL 18（18 有时长）/ OPENLIST 83（83）/ WEBDAV 182（53）**。
+
+
+## 9.6 并发数配置（2026-11-16 第十一轮）
+
+- 数据层：ServerConfig / WebDavConfig 新增 concurrency: Int = 0，语义「0 = 用默认」；
+  ffectiveConcurrency 统一钳到 1..16，默认 DEFAULT_CONCURRENCY = 4
+  （常量在 core/datastore 的 ServerConfig.kt 顶部）。ServerConfigStore /
+  WebDavConfigStore 加 FIELD_CONCURRENCY = "concurrency"，写进 p{id}_concurrency，
+  删除 profile 时一并清理。
+- 界面：两个 ConfigScreen 在「音乐目录（可选）」下方加
+  ConfigField("请求并发数（可选）", hint="不填用默认 4；内网可调 8~16，公网建议 2~3", KeyboardType.Number)；
+  ViewModel 的 concurrency 以 String 保存（空串 = 默认），onConcurrencyChange
+  只留数字、最多两位，落库 	oIntOrNull() ?: 0。
+- 同步侧：RemoteLibrarySyncer / WebDavLibrarySyncer 的目录 BFS 改成**按层并行**
+  （coroutineScope { async { … }.awaitAll() } + Semaphore(effectiveConcurrency)），
+  单目录内部仍逐页顺序请求；localDirs / 计数改 AtomicInteger，
+  WebDAV 的 canClean 改 ailedDirectories.get() == 0；
+  illMissingDurations（云端时长探测）同样按并发数并行。
+- 实测（模拟器，两台 OpenList 同时启用，两处并发都留空 → 默认 4）：
+  「同步完成：扫描 103 项 · 写入 83 首 · 2 台服务器 · 补全 11 首 · 去重 5 首 ·
+  清理 1 条 · 30586 ms」（上一轮串行同口径 32907 ms / 26800 ms 波动）。
+
+## 9.7 云端曲目下载（2026-11-16 第十一轮）
+
+- core/network/RemoteFileDownloader：先经 StreamUrlResolver 拿直链，再用 OkHttp
+  直连下载（带音源鉴权头已由 resolver 拼好）。
+- 目标目录：DownloadConfigStore（SharedPreferences msop_download）存
+  	ree_uri / 	ree_name；有 SAF 树就 DocumentsContract.createDocument 建文件
+  （重名自动加 _2、_3），否则写 getExternalFilesDir(DIRECTORY_MUSIC)。
+  失败统一抛 DownloadException，调用方 toast。
+- 入口：曲库/歌单曲目三点菜单「下载歌曲」（仅 source != LOCAL 显示）+
+  歌单多选底部栏「下载」（选了云端曲才亮）。
+- 实测：单曲落盘 iles/Music/Its My Life Bon Jovi.flac 29,648,735 B；
+  重复下载生成 …_2.flac；批量两首云端曲（29.6 MB + 22.6 MB）都成功，
+  toast「下载完成 2 首」。
+## 9.8 通知栏 / 锁屏播放器（2026-11-16 追加）
+
+- 实现类：`feature/player/…/notification/ShuYinNotificationProvider.kt`（Media3
+  `MediaNotification.Provider`，由 `PlaybackService.setMediaNotificationProvider` 装入）。
+- 形态：**普通通知 + `Notification.DecoratedCustomViewStyle()`** + 自绘 `RemoteViews`
+  （`res/layout/notif_player_small.xml`：`notif_bg` 底图 + 48dp 方形封面 + 歌名/歌手 +
+  上一首/播放暂停/下一首）。底图是 `cardBackground(tint)` 画的圆角矩形位图
+  （封面主色，360×72dp / 半径 18dp），字色按 `Color.luminance(tint) > 0.42f` 取深/浅。
+- 频道：`msop_playback_v2`，`IMPORTANCE_DEFAULT` + `setSound(null)` + `enableVibration(false)`
+  + `lockscreenVisibility=PUBLIC`。**换频道 id 才能改重要性**；LOW 频道的静音通知不上锁屏。
+- 死路（勿再试）：`MediaStyle` / `DecoratedMediaCustomViewStyle` 一律被 SystemUI 接管成
+  「大封面 + 波浪进度条」系统大卡，`setCustomContentView` 被忽略；`setColorized(true)`
+  在锁屏又被重新套白底。所以卡片外观只有两种选择：系统大卡（能进锁屏媒体区、有进度）
+  或自绘卡（外观可控、外层多一圈系统白底、传输键要靠视图自己的 PendingIntent）。
+- 参考：`cosmictaserdev-creator/Convx` 的通知就是 Media3 的 `DefaultMediaNotificationProvider`
+  （无自定义布局），用户截图里的紧凑卡是旧版 SystemUI 模板，不是该项目写的。
+- 入口 Intent 全部走 `MediaController`（`Media3Session` 命令），因此卡片在锁屏上也能控制播放。
