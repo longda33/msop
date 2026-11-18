@@ -8,6 +8,8 @@ import com.msop.player.core.common.log.AppLog
 import com.msop.player.core.common.saf.SafRootProvider
 import com.msop.player.core.model.SourceType
 import com.msop.player.core.model.Track
+import com.msop.player.core.network.RemoteLyricsProbe
+import com.msop.player.core.network.StreamUrlResolver
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -35,12 +37,15 @@ import javax.inject.Singleton
  * 3. 裸路径兜底（只在没有分区存储限制的场景有效）
  *
  * 内嵌歌词没有时间标签时退化为静态文本，见 [Lyrics.synced]。
- * 远程曲目的内嵌歌词要先把文件拉到本地，等 P3 远程音源落地后再接。
+ * 2026-11-17：远程曲目的内嵌歌词已接通——用 [StreamUrlResolver] 拿直链，
+ * [RemoteLyricsProbe] 通过 Range 读 ID3 USLT / FLAC Vorbis LYRICS / MP4 ©lyr，
+ * 不再下载整首歌。此前 `readEmbedded()` 对非 LOCAL 直接 return null，等于零实现。
  */
 @Singleton
 class LyricsRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val safRoots: SafRootProvider,
+    private val resolver: StreamUrlResolver,
 ) {
 
     suspend fun load(track: Track): Lyrics? = withContext(Dispatchers.IO) {
@@ -61,9 +66,16 @@ class LyricsRepository @Inject constructor(
             ?: Lyrics.plain(embedded).takeIf { !TtmlParser.looksLikeTtml(embedded) && !it.isEmpty }
     }
 
-    /** 直接从音频文件里读内嵌歌词；远程曲目不在这一步处理。 */
-    private fun readEmbedded(track: Track): String? {
-        if (track.source != SourceType.LOCAL) return null
+    /** 直接从音频文件里读内嵌歌词；本地读文件，云端走 Range 探测。 */
+    private suspend fun readEmbedded(track: Track): String? {
+        if (track.source != SourceType.LOCAL) {
+            return runCatching {
+                val url = resolver.resolve(track.uri)
+                RemoteLyricsProbe.lyrics(url, resolver.headers(track.uri))
+            }.onFailure {
+                AppLog.i("云端内嵌歌词读取失败 track=${track.title} 原因=${it.javaClass.simpleName}")
+            }.getOrNull()
+        }
 
         return runCatching {
             openAudio(track)?.use { EmbeddedLyrics.extract(it) }
@@ -114,6 +126,30 @@ class LyricsRepository @Inject constructor(
     }
 
     /**
+     * 读旁挂文件，超过 [MAX_SIDECAR_BYTES] 当作不存在。
+     *
+     * 2026-11-17 新增：原来一律 `readBytes()`。旁挂文件来自用户目录/云端目录，
+     * 一个被误命名成 `.lrc` 的百兆文件（或恶意构造的压缩炸弹式文本）会把
+     * 歌词线程的堆直接撑爆；正常歌词几百 KB 顶天，8 MB 足够宽容。
+     */
+    private fun readLimited(input: InputStream?): ByteArray? {
+        if (input == null) return null
+        return input.use { stream ->
+            val out = java.io.ByteArrayOutputStream(16 * 1024)
+            val buffer = ByteArray(8 * 1024)
+            var total = 0
+            while (true) {
+                val read = stream.read(buffer)
+                if (read <= 0) break
+                total += read
+                if (total > MAX_SIDECAR_BYTES) return null
+                out.write(buffer, 0, read)
+            }
+            out.toByteArray()
+        }
+    }
+
+    /**
      * 先按 TTML 解析，再按 LRC 解析。
      *
      * `.lrc` 文件里塞 TTML 的情况真实存在（导出工具把扩展名写错），所以不只看扩展名。
@@ -137,7 +173,7 @@ class LyricsRepository @Inject constructor(
         return runCatching {
             val treeUri = DocumentsContract.buildTreeDocumentUri(documentUri.authority, segments[1])
             val siblingUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, siblingDocumentId)
-            context.contentResolver.openInputStream(siblingUri)?.use { it.readBytes() }
+            context.contentResolver.openInputStream(siblingUri)?.let(::readLimited)
         }.onFailure {
             AppLog.i("SAF 歌词读取失败 uri=$uri 原因=${it.javaClass.simpleName}")
         }.getOrNull()
@@ -162,13 +198,17 @@ class LyricsRepository @Inject constructor(
 
             val relative = localPath.removePrefix("$rootPath/")
             val sibling = withExtension(relative, extension) ?: continue
+            // 2026-11-17 修复：子文档 id 的格式是「树根 id + '/' + 相对路径」。
+            // 原来写成 "$treeDocumentId:$sibling"，构造出 `primary:Music:MsopTest/a.lrc`
+            // ——多冒号在 DocumentsProvider 里解析不到，openInputStream 必然抛
+            // IllegalArgumentException，被 runCatching 吞掉后表现为「明明有 .lrc 却读不到」。
             val siblingUri = DocumentsContract.buildDocumentUriUsingTree(
                 treeUri,
-                "$treeDocumentId:$sibling",
+                "$treeDocumentId/$sibling",
             )
 
             val bytes = runCatching {
-                context.contentResolver.openInputStream(siblingUri)?.use { it.readBytes() }
+                context.contentResolver.openInputStream(siblingUri)?.let(::readLimited)
             }.getOrNull()
             if (bytes != null) return bytes
         }
@@ -181,7 +221,7 @@ class LyricsRepository @Inject constructor(
             val audio = File(localPath)
             File(audio.parentFile, audio.nameWithoutExtension + "." + extension)
                 .takeIf { it.isFile }
-                ?.readBytes()
+                ?.let { file -> file.inputStream().let(::readLimited) }
         }.getOrNull()
     }
 
@@ -211,5 +251,7 @@ class LyricsRepository @Inject constructor(
 
     private companion object {
         val SIDECAR_EXTENSIONS = listOf("lrc", "ttml", "xml")
+        /** 旁挂歌词的读取上限：正常歌词几百 KB，8 MB 只是拦住畸形/误命名的超大文件。 */
+        const val MAX_SIDECAR_BYTES = 8 * 1024 * 1024
     }
 }

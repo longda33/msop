@@ -58,6 +58,8 @@ fun AlbumDetailScreen(
     tracks: List<Track>,
     currentTrackId: String?,
     isPlaying: Boolean,
+    /** 播放进度（2026-11-18 用户指令）：正在播那一行右侧显示剩余时长并递减。 */
+    positionMs: Long = 0L,
     onBack: () -> Unit,
     onPlayAll: (List<Track>, Int) -> Unit,
 ) {
@@ -247,7 +249,14 @@ fun AlbumDetailScreen(
                         )
                     }
                     Text(
-                        text = track.durationMs.toDurationLabel(),
+                        // 2026-11-18 用户指令：正在播那一行显示「剩余」并逐秒递减
+                        text = if (current && track.durationMs > 0L) {
+                            val left = (track.durationMs - positionMs).coerceAtLeast(0L)
+                            val sec = (left + 999L) / 1000L
+                            "-%d:%02d".format(sec / 60, sec % 60)
+                        } else {
+                            track.durationMs.toDurationLabel()
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         color = Palette.TextTertiary,
                     )

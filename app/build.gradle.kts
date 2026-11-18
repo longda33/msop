@@ -129,6 +129,11 @@ dependencies {
 
     testImplementation(libs.junit)
 
+    // 2026-11-17：备份导入要在**一个事务里**恢复全部歌单（playlists.json 中途失败
+    // 不能留下半个歌单）。`withTransaction` 来自 room-ktx，core:database 里是
+    // implementation 依赖，不会传递到 app，所以这里显式声明。
+    implementation(libs.room.ktx)
+
     // WorkManager 的 Hilt 集成：Application 要实现 Configuration.Provider 并提供 HiltWorkerFactory
     implementation(libs.hilt.work)
     implementation(libs.androidx.work.runtime.ktx)

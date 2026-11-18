@@ -47,6 +47,7 @@ class WebDavConfigStore @Inject constructor(
 
     fun isEnabled(id: String): Boolean = id in enabledIds()
 
+    @Synchronized
     fun setEnabled(id: String, enabled: Boolean) {
         if (id !in ids()) return
         val current = enabledIds()
@@ -81,6 +82,7 @@ class WebDavConfigStore @Inject constructor(
 
     // ---------------------------------------------------------------- 增删改
 
+    @Synchronized
     fun upsert(config: WebDavConfig): WebDavConfig {
         migrateLegacyIfNeeded()
         val existingIds = ids()
@@ -119,6 +121,7 @@ class WebDavConfigStore @Inject constructor(
 
     fun activate(id: String) = setEnabled(id, true)
 
+    @Synchronized
     fun delete(id: String) {
         val remaining = ids().filterNot { it == id }
         val enabled = enabledIds().filterNot { it == id }
@@ -134,12 +137,38 @@ class WebDavConfigStore @Inject constructor(
         }.apply()
     }
 
+    @Synchronized
     fun clear() {
         prefs.edit().clear().apply()
     }
 
+    /** 备份恢复：保留原 profile id 与启用集合，整表覆盖。同 ServerConfigStore.restoreAll。 */
+    @Synchronized
+    fun restoreAll(configs: List<WebDavConfig>, enabledIds: List<String>) {
+        val ids = configs.map { it.id }.filter { it.isNotBlank() }.distinct()
+        require(ids.size == configs.size) { "备份中的 WebDAV 配置缺少稳定 id" }
+        val enabled = enabledIds.filter { it in ids }
+        prefs.edit().apply {
+            clear()
+            putBoolean(KEY_MIGRATED, true)
+            putString(KEY_IDS, ids.joinToString(","))
+            putString(KEY_ENABLED, enabled.joinToString(","))
+            if (enabled.isNotEmpty()) putString(KEY_ACTIVE, enabled.first())
+            configs.forEach { config ->
+                putString(key(config.id, FIELD_NAME), config.name.ifBlank { hostOf(config.baseUrl) })
+                putString(key(config.id, FIELD_URL), config.baseUrl)
+                putString(key(config.id, FIELD_USER), config.username)
+                putString(key(config.id, FIELD_PASSWORD), config.password)
+                putString(key(config.id, FIELD_ROOT), config.rootPath)
+                putBoolean(key(config.id, FIELD_ALLOW_HTTP), config.allowPlainHttp)
+                putInt(key(config.id, FIELD_CONCURRENCY), config.concurrency)
+            }
+        }.apply()
+    }
+
     // ---------------------------------------------------------------- 状态与计数
 
+    @Synchronized
     fun saveStatus(id: String, status: ServerStatus, message: String) {
         prefs.edit()
             .putString(key(id, FIELD_STATUS), status.name)
@@ -159,6 +188,7 @@ class WebDavConfigStore @Inject constructor(
         markSynced(id, trackCount, atMillis)
     }
 
+    @Synchronized
     fun markSynced(id: String, trackCount: Int, atMillis: Long = System.currentTimeMillis()) {
         prefs.edit()
             .putInt(key(id, FIELD_SYNC_COUNT), trackCount)
@@ -230,7 +260,7 @@ class WebDavConfigStore @Inject constructor(
         const val FIELD_PASSWORD = "password"
         const val FIELD_ROOT = "root"
         const val FIELD_ALLOW_HTTP = "allow_http"
-    const val FIELD_CONCURRENCY = "concurrency"
+        const val FIELD_CONCURRENCY = "concurrency"
         const val FIELD_STATUS = "status"
         const val FIELD_STATUS_MSG = "status_msg"
         const val FIELD_STATUS_AT = "status_at"

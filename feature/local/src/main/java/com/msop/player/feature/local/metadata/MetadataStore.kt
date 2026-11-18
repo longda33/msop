@@ -30,8 +30,11 @@ interface MetadataStore {
 
     suspend fun countWithCover(): Int
 
-    /** 全部非空的 `coverUri`，供封面缓存清理孤立文件。 */
+    /** 全部非空的 `coverUri`，供封面缓存清理孤立文件（含云端引用，两边共用一个目录）。 */
     suspend fun referencedCovers(): Set<String>
+
+    /** 清空某来源全部封面引用，返回受影响行数（清缓存后重建封面用）。 */
+    suspend fun clearAllCovers(): Int = 0
 
     /**
      * 已有 `coverUri` 的曲目（2026-11-16 晚用户报「封面怎么是白色」后新增）。

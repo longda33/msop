@@ -2,11 +2,6 @@ package com.msop.player.ui.player
 
 import android.content.res.Configuration
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -44,6 +39,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Info
@@ -53,10 +49,9 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -72,6 +67,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -131,11 +127,13 @@ import com.msop.player.ui.components.CircleGlassButton
 import com.msop.player.ui.components.CoverThumb
 import com.msop.player.ui.components.GlassPill
 import com.msop.player.ui.components.PrimaryPill
+import com.msop.player.ui.components.PlaylistPickerDialog
 import com.msop.player.ui.components.TrackInfoDialog
 import com.msop.player.ui.components.artSeed
 import com.msop.player.ui.components.glassSurface
 import com.msop.player.ui.icons.GeneratedArtwork
 import com.msop.player.ui.icons.PlayerIcons
+import com.msop.player.ui.playlist.PlaylistViewModel
 import com.msop.player.ui.theme.Gradients
 import com.msop.player.ui.theme.LocalMsopPalette
 import com.msop.player.ui.theme.Palette
@@ -169,6 +167,8 @@ fun PlayerSheet(
     /** 播放页三点菜单的「下载歌曲」；云端曲目才显示，本机曲目传 null。 */
     onDownload: (() -> Unit)? = null,
     lyricsViewModel: LyricsViewModel = hiltViewModel(),
+    /** 2026-11-17 深夜（续）用户指令「播放界面 三点菜单增加 加入歌单」：复用歌单 VM。 */
+    playlistViewModel: PlaylistViewModel = hiltViewModel(),
 ) {
     // 播放模式扇形菜单：开关 + 按钮上报的锚点（root 坐标 px）
     var modeMenuOpen by remember { mutableStateOf(false) }
@@ -205,8 +205,10 @@ fun PlayerSheet(
     // 同时 SeekBar 抬手分支改成「无条件提交」，让 onCommit 里的归位一定执行。
     LaunchedEffect(track?.id) { dragValue = -1f }
 
-    // 定时关闭：sleepEndsAt 为 0 表示未开启
-    var sleepEndsAt by remember { mutableLongStateOf(0L) }
+    // 定时关闭：sleepEndsAt 为 0 表示未开启。
+    // 2026-11-18：原来用 remember，播放页重建后倒计时归零但用户以为还在计时；
+    // 时间戳是基本类型，rememberSaveable 就能覆盖配置变更/Activity 重建。
+    var sleepEndsAt by rememberSaveable { mutableLongStateOf(0L) }
     var sleepDialogOpen by remember { mutableStateOf(false) }
     var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val playingNow by rememberUpdatedState(state.isPlaying)
@@ -223,13 +225,12 @@ fun PlayerSheet(
             }
         }
     }
-    val sleepRemainingMin = if (sleepEndsAt > 0L) {
-        (((sleepEndsAt - nowMs).coerceAtLeast(0L) + 59_999L) / 60_000L).toInt()
-    } else {
-        0
-    }
-    val sleepLabel = if (sleepRemainingMin > 0) "${sleepRemainingMin}分" else "定时"
-    val sleepActive = sleepRemainingMin > 0
+    // 2026-11-17（用户需求「播放界面 定时设置后 增加倒计时显示」）：底部 dock 的定时按钮
+    // 原来只显示「N分」（四舍五入到分钟，看起来像没动），改成每秒刷新的 mm:ss 倒计时。
+    val sleepRemainingMs = if (sleepEndsAt > 0L) (sleepEndsAt - nowMs).coerceAtLeast(0L) else 0L
+    val sleepRemainingMin = (((sleepRemainingMs + 59_999L) / 60_000L)).toInt()
+    val sleepLabel = if (sleepEndsAt > 0L) sleepCountdownLabel(sleepRemainingMs) else "定时"
+    val sleepActive = sleepEndsAt > 0L
 
     if (sleepDialogOpen) {
         SleepDialog(
@@ -335,6 +336,8 @@ fun PlayerSheet(
             // 与播放页共用同一套顶栏——原版就是「顶栏 + 歌词头部 + 控制条」三层常驻，
             // 不再为歌词页单独裁掉顶栏与缓冲提示。
             if (!isLandscape) {
+                val playlists by playlistViewModel.playlists.collectAsStateWithLifecycle()
+                val memberships by playlistViewModel.memberships.collectAsStateWithLifecycle()
                 PlayerTopBar(
                     onCollapse = onCollapse,
                     state = state,
@@ -342,12 +345,15 @@ fun PlayerSheet(
                     dragModifier = dragModifier,
                     track = track,
                     onDownload = onDownload,
+                    playlists = playlists.map { it.id to it.name },
+                    playlistIds = track?.let { memberships[it.id].orEmpty() } ?: emptySet(),
+                    onAddToPlaylist = track?.let { current ->
+                        { id: Long -> playlistViewModel.addTracks(id, listOf(current)) }
+                    },
                 )
 
-                PlaybackNotice(
-                    isBuffering = state.isBuffering,
-                    networkLost = state.networkLost,
-                )
+                // 2026-11-17 深夜（续）用户指令：「删掉胶囊状态弹窗（顶部文字 状态）」——
+                // 缓冲 / 断网提示只保留顶栏那行状态文字，这里不再飘一颗玻璃 pill。
             }
 
             if (isLandscape) {
@@ -527,10 +533,15 @@ private fun PlayerTopBar(
     dragModifier: Modifier,
     track: Track?,
     onDownload: (() -> Unit)?,
+    playlists: List<Pair<Long, String>> = emptyList(),
+    playlistIds: Set<Long> = emptySet(),
+    onAddToPlaylist: ((Long) -> Unit)? = null,
 ) {
     // 2026-11-16 用户指令：「顶部标题随播放状态变化，不再是固定的『正在播放』」。
     var topMenuOpen by remember { mutableStateOf(false) }
     var infoOpen by remember { mutableStateOf(false) }
+    // 2026-11-17 深夜（续）：三点菜单里的「加入歌单」弹窗
+    var pickerOpen by remember { mutableStateOf(false) }
     val statusText = when {
         !hasTrack -> "未在播放"
         state.networkLost -> "网络已断开"
@@ -576,7 +587,9 @@ private fun PlayerTopBar(
             Text(
                 text = statusText,
                 style = MaterialTheme.typography.labelSmall,
-                color = Palette.TextSecondary,
+                // 2026-11-17 深夜（续）用户报「顶部正在播放文字颜色看不清」：
+                // 原来用 TextSecondary + 1sp 字距，在玻璃底上几乎糊住；改成主文字色。
+                color = Palette.TextPrimary,
                 letterSpacing = 1.sp,
             )
         }
@@ -609,6 +622,33 @@ private fun PlayerTopBar(
                         infoOpen = true
                     },
                 )
+                // 2026-11-17 深夜（续）用户指令「播放界面 三点菜单增加 加入歌单」：
+                // 与曲库/歌单行的三点菜单同语义——已加过显示「已加歌单」，点开仍可选别的歌单；
+                // 一个歌单都没有时保留这一项，弹窗里会给「新建歌单」入口。
+                if (onAddToPlaylist != null) {
+                    DropdownMenuItem(
+                        text = { Text(if (playlistIds.isEmpty()) "加入歌单" else "已加歌单") },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = if (playlistIds.isEmpty()) {
+                                    PlayerIcons.PlaylistAddCircle
+                                } else {
+                                    Icons.Filled.Check
+                                },
+                                contentDescription = null,
+                                tint = if (playlistIds.isEmpty()) {
+                                    Palette.TextSecondary
+                                } else {
+                                    Palette.BlueLight
+                                },
+                            )
+                        },
+                        onClick = {
+                            topMenuOpen = false
+                            pickerOpen = true
+                        },
+                    )
+                }
                 // 只有云端曲目给 onDownload（本机文件已经在本地，不需要下载）
                 if (track != null && track.source != SourceType.LOCAL) {
                     onDownload?.let { download ->
@@ -636,70 +676,20 @@ private fun PlayerTopBar(
             infoOpen = false
         }
     }
-}
 
-/**
- * 缓冲 / 断网提示（P7-03）。
- *
- * 缓冲提示延迟 1.2 秒出现：切歌和 seek 都会短暂进入 BUFFERING，立刻弹提示会闪。
- * 超过 15 秒改文案为「网络较慢」，断网提示优先于缓冲提示。
- */
-@Composable
-private fun PlaybackNotice(
-    isBuffering: Boolean,
-    networkLost: Boolean,
-    modifier: Modifier = Modifier,
-) {
-    var showBuffering by remember { mutableStateOf(false) }
-    var slowNetwork by remember { mutableStateOf(false) }
-
-    LaunchedEffect(isBuffering) {
-        if (isBuffering) {
-            delay(1_200)
-            showBuffering = true
-            delay(13_800)
-            slowNetwork = true
-        } else {
-            showBuffering = false
-            slowNetwork = false
-        }
-    }
-
-    AnimatedVisibility(
-        visible = networkLost || showBuffering,
-        enter = fadeIn() + expandVertically(),
-        exit = fadeOut() + shrinkVertically(),
-        modifier = modifier,
-    ) {
-        Box(
-            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Row(
-                modifier = Modifier
-                    .glassSurface(Shapes.pill, Palette.Surface, elevation = 8.dp)
-                    .padding(horizontal = 14.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                if (!networkLost) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(13.dp),
-                        color = Palette.BlueLight,
-                        strokeWidth = 1.8.dp,
-                    )
-                }
-                Text(
-                    text = when {
-                        networkLost -> "网络已断开，播放已暂停"
-                        slowNetwork -> "网络较慢，仍在缓冲…"
-                        else -> "缓冲中…"
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (networkLost) Palette.Gold else Palette.TextSecondary,
-                )
-            }
-        }
+    // 2026-11-17 深夜（续）：播放页三点菜单的「加入歌单」
+    if (pickerOpen) {
+        PlaylistPickerDialog(
+            title = "加入歌单",
+            playlists = playlists,
+            excludeId = null,
+            checkedIds = playlistIds,
+            onPick = { id ->
+                onAddToPlaylist?.invoke(id)
+                pickerOpen = false
+            },
+            onDismiss = { pickerOpen = false },
+        )
     }
 }
 
@@ -1189,6 +1179,22 @@ internal fun TransportIcon(
             tint = tint,
             modifier = Modifier.size(iconSize),
         )
+    }
+}
+
+/**
+ * 定时倒计时文案（2026-11-17 用户需求）：不足 1 小时显示 `mm:ss`，
+ * 手动输入超过 1 小时的显示 `h:mm:ss`。向上取整，最后一秒不留 00:00。
+ */
+private fun sleepCountdownLabel(remainingMs: Long): String {
+    val totalSec = (remainingMs.coerceAtLeast(0L) + 999L) / 1000L
+    val hours = totalSec / 3600
+    val minutes = (totalSec % 3600) / 60
+    val seconds = totalSec % 60
+    return if (hours > 0L) {
+        java.lang.String.format(java.util.Locale.US, "%d:%02d:%02d", hours, minutes, seconds)
+    } else {
+        java.lang.String.format(java.util.Locale.US, "%02d:%02d", minutes, seconds)
     }
 }
 

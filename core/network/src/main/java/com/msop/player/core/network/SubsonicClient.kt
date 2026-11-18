@@ -51,8 +51,8 @@ class SubsonicClient @Inject constructor(
     /** 连通性测试：ping + 取一页歌曲，返回库里的歌曲总数。 */
     fun testConnectionBlocking(): Int {
         val config = requireConfig()
-        execute(apiUrl(config, "ping.view"))
-        return execute(apiUrl(config, "search3.view", *searchParams(pageSize = 1)))
+        execute(config, apiUrl(config, "ping.view"))
+        return execute(config, apiUrl(config, "search3.view", *searchParams(pageSize = 1)))
             .searchResult3?.total ?: 0
     }
 
@@ -71,6 +71,7 @@ class SubsonicClient @Inject constructor(
         var guard = 0
         while (guard++ < MAX_PAGES) {
             val body = execute(
+                config,
                 apiUrl(config, "search3.view", *searchParams(pageSize, offset)),
             )
             val page = body.searchResult3?.song.orEmpty()
@@ -121,7 +122,11 @@ class SubsonicClient @Inject constructor(
         return builder.build()
     }
 
-    private fun execute(url: HttpUrl): SubsonicResponse {
+    private fun execute(config: ServerConfig, url: HttpUrl): SubsonicResponse {
+        // 2026-11-17 修复：与 OpenListClient / WebDavClient 用同一条规矩——
+        // 明文 HTTP 只有用户在这条配置上点过「仍然继续」才发请求，否则一律拒绝。
+        // 三个客户端原本只有 OpenList 做了闸门，Subsonic 会把 apiKey 明文发出去。
+        ensureAllowed(config)
         val request = Request.Builder().url(url).get().build()
         val response = try {
             http.newCall(request).execute()
@@ -148,6 +153,13 @@ class SubsonicClient @Inject constructor(
                 throw OpenListException.Api(code, message)
             }
             return body
+        }
+    }
+
+    /** 明文 HTTP 的行为约束与 OpenList / WebDAV 一致：用户点过「仍然继续」才放行。 */
+    private fun ensureAllowed(config: ServerConfig) {
+        if (config.baseUrl.startsWith("http://", ignoreCase = true) && !config.allowPlainHttp) {
+            throw OpenListException.PlainHttpNotConfirmed()
         }
     }
 

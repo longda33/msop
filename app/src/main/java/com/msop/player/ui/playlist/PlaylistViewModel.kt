@@ -16,7 +16,7 @@ import com.msop.player.core.model.SourceType
 import com.msop.player.core.model.Track
 import com.msop.player.core.network.DownloadCenter
 import com.msop.player.core.network.RemoteFileDownloader
-import com.msop.player.ui.library.TrackMerger
+import com.msop.player.core.model.TrackMerger
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow

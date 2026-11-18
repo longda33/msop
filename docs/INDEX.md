@@ -1,13 +1,13 @@
 # INDEX.md — 目录导航（接手先读这一页）
 
-> **目的**：任何模型接手本项目，读这一页就知道「读什么、跳过什么、改哪里、怎么跑」。不需要通读 `AGENTS.md`（100 KB）、`05-progress.md`（217 KB）。
+> **目的**：任何模型接手本项目，读这一页就知道「读什么、跳过什么、改哪里、怎么跑」。不需要通读 `AGENTS.md`（约 110 KB）、`05-progress.md`（约 232 KB / 2200 行）。
 > 本页只做导航与状态快照，**唯一真相仍是 `TASKS.md`**；本页与 `TASKS.md` 冲突时以 `TASKS.md` 为准。
 
 ## 0. 三句话
 
 1. **是什么**：安卓音乐播放器，Kotlin + Compose + Media3，包名 `com.msop.player`。只读本机音频 + 对接自己的 OpenList / WebDAV / Subsonic 曲库，自用不上架。
-2. **做到哪了**：核心功能全部打通；P0–P6 基本完成，P7 剩 6 项未完结（见 §4）。设备是**安卓模拟器**（`adb -s emulator-5554`，Android 15 / 900×1600），不是真机。
-3. **下一步能做什么**：P5-04 大库性能、P6-01 走查勾单可立即做；P5-01 远程歌词、P7-03 缓冲提示、P7-12 libFLAC 需要外部条件（详见 §4 备注）。
+2. **做到哪了**：核心功能全部打通；P0–P4 全部完成，P6 只剩 P6-01 走查，50 项任务已完成 44 项，剩 6 项未完结（P1-04、P5-01、P5-04、P6-01、P7-03、P7-12，见 §4）。设备是**安卓模拟器**（`adb -s emulator-5554`，Android 15 / 900×1600），不是真机。
+3. **下一步能做什么**：P5-04 大库性能、P6-01 走查勾单可立即做；P1-04 权限拒绝流程、P5-01 云端歌词素材、P7-03 缓冲提示需要外部条件；P7-12 libFLAC 被 NDK 阻塞（详见 §4 备注）。
 
 ## 1. 推荐读取顺序（省时间）
 
@@ -17,7 +17,7 @@
 | 2 | `AGENTS.md` 的 **§0 第 1–7 条** | 只读这七条（约 60 行） | 硬约束与「最容易踩的坑」清单，写代码前必读 |
 | 3 | `TASKS.md` 的 **总览表 + 第一个未完成行** | 约 30 行 | 分清已完成/未完成，别做重复工 |
 | 4 | 按任务领域选读：远程/缓存/Subsonic → `03-openlist-api.md` §6–§8；UI 视觉 → `07-ui-design.md`；模块边界 → `02-architecture.md`；找参考实现 → `04-reference-index.md` | 按需 `grep` 章节 | 全是按主题分好的，不要整篇读 |
-| 5 | 只有要查历史决策时才碰 `05-progress.md` | **从文件尾往前搜日期**，别从头读 | 1861 行时间序日志，旧的已过时 |
+| 5 | 只有要查历史决策时才碰 `05-progress.md` | **从文件尾往前搜日期**，别从头读 | 2200 行时间序日志，旧的已过时 |
 
 **明确不要通读的**：`AGENTS.md` 第 2 节「最后更新」单元格（几百 KB 的历史流水）、`05-progress.md` 全文、`08-shuyin-integration.md`（ShuYin 融合计划，577 行，只查具体条目）。这三处只在需要确证某个历史细节时用 `Grep` 定位。
 
@@ -56,24 +56,35 @@
 | 后台播放、通知栏、缓存数据源 | `feature/player/src/main/java/com/msop/player/feature/player/PlaybackService.kt` |
 | 远程同步、时长探测、封面 | `feature/remote/`、`core/network/` |
 | 数据库与迁移 | `core/database/src/main/java/com/msop/player/core/database/MsopDatabase.kt` |
-| 歌词解析（本地内嵌/旁挂，远程未实现） | `feature/lyrics/` |
+| 歌词解析（本机内嵌/旁挂 + 云端内嵌；云端旁挂 `.lrc` 未实现） | `feature/lyrics/`、`core/network/RemoteLyricsProbe.kt` |
+| 代码审查发现与已修问题 | `CODE-REVIEW-2026-11-16.md`（基线 21 项）、`CODE-FIXES-2026-11-17.md`（本轮修复 + 未验证项） |
 
 > 规则：`ui/` 全在 `app` 模块，`feature/*/ui/` 保持空着（原因见 `AGENTS.md` §5）。**不要**把 UI 拆进 feature 模块。
 
-## 4. 状态快照（2026-11-16）
+## 4. 状态快照（2026-11-17 更新）
 
-`TASKS.md` 表格标记：`[x]` 52 行 · 未完结 6 行。
+`TASKS.md` 表格标记：`[x]` 44 行 · 未完结 6 行（`[~]` 3 · `[ ]` 2 · `[!]` 1）。
 
 | 任务 | 标记 | 卡在哪 |
 |---|---|---|
 | P1-04 权限拒绝流程 | `[~]` | 模拟器自动授予权限，拒绝/重试弹窗拍不到 |
-| P5-01 LRC 远程歌词 | `[~]` | 远程分支**完全没实现**（`readEmbedded()` 对非 LOCAL 直接 return null）+ 两台服务器无 `.lrc` 素材 |
+| P5-01 LRC 远程歌词 | `[~]` | 云端**内嵌**歌词 2026-11-17 傍晚已实现（`StreamUrlResolver` + `RemoteLyricsProbe`，ID3 USLT / FLAC LYRICS / MP4 ©lyr），但抽样 25 首**0 个歌词标签**、无素材可验；云端**旁挂 `.lrc`** 仍未实现，两台服务器也无 `.lrc` |
 | P5-04 大库性能（5 万首） | `[ ]` | 无大库样本，可造数据后立刻做 |
 | P6-01 全流程走查 | `[ ]` | 清单未逐条勾完，可立即做 |
-| P7-03 断网保护 | `[~]` | 断网暂停/恢复不续播/本地曲不受影响已验；**「缓冲中…」提示缺低速网络条件** |
+| P7-03 断网保护 | `[~]` | 断网暂停/恢复不续播/本地曲不受影响已验；迷你条已加「正在连接云端，缓冲中…」，但播放页「缓冲中…」/「网络较慢，仍在缓冲…」仍缺低速网络实测 |
 | P7-12 libFLAC Native | `[!]` | 本机无 NDK/CMake，且 Media3 未发布 `media3-decoder-flac` AAR |
 
-最近一轮（第十五轮 r16/r17/r18）做了什么、证据在哪：见 `AGENTS.md` §0.5 与 `05-progress.md` 末节。
+2026-11-17 补修：OpenList `/dav` 当 WebDAV 音源时「能同步、不能播放」——播放改走原生 REST 换直链，模拟器已完整播完一首，见 `AGENTS.md` §0.6、`03-openlist-api.md` §10、`05-progress.md` 末节。
+2026-11-17 下午补：云端内嵌封面（`RemoteCoverProbe` + `RemoteCoverExtractor`，并发 4）、玻璃垫色提到 0.90/0.92、「从歌单移除」改「移除歌单」，见 `AGENTS.md` §0.7、`03-openlist-api.md` §11。
+**2026-11-17 晚回滚**：上面的 0.90/0.92 把液态玻璃糊成实板（用户报「效果丢失」），三处垫色回到上游 ShuYin 的 0.55 / 0.60；随后按 `ShuYin.PNG` / `msop.PNG` 对比又发现 `AmbientBackground()` 画在 `.layerBackdrop()` 外面（采到的是透明图，模糊等于没做），已把它挪进录制子树。高光曾加到 2dp / `White 0.62`，用户实物后否掉（描边感），已退回 1dp 原参数。见 `AGENTS.md` §0.11。
+2026-11-17 傍晚再补：歌单播放/随机按钮状态、收藏条固定置顶、云端内嵌歌词（ID3/FLAC/MP4）、云端缓冲迷你条提示、白封面魔数校验与自愈，见 `AGENTS.md` §0.8 与 `03-openlist-api.md` §12。
+同日文档状态同步：总览表计数与 P5-01 / P7-03 备注按上表对齐（只改文档、勾选不变）。
+**2026-11-17 深夜五项缺陷修复**：① 筛选在歌手/专辑/文件夹上本来生效，加 `SourceFilterBanner` 让状态可见（歌单 Tab 只提示不过滤）；② 文件夹收敛——云端 rootPath 留空不再回退子目录、本机按「设置里添加的音乐目录」聚合（实测 4 条）；③ 队列/歌单拖动改「按下即拖」+ 主题感知手柄色（浅色可见、adb 实测能换位落库）；④ 播放页定时改 `mm:ss` 每秒倒计时；⑤ 设置「下载路径」显示真实路径。见 `AGENTS.md` §0.12。
+**2026-11-17 深夜五项收尾修正**（对上一批的验收反馈）：① 状态条瘦成只剩「本机 / 云端」二字（删首数与「点一下恢复全部来源」）；② 文件夹本机项副标题显示真实路径（`本机 · /storage/emulated/0`），OpenList / WebDAV 标题改用设置里填的名称（`lan` / `lan-dav` / 主机串），`cloudNames` 键改为 `tag + normalizeCloudRootPath()` 才命中；③ 拖动回滚成「长按抓取才能拖」，另一根手指可照常滑列表（颜色修复保留退回原尺寸不上调）；④ 歌词页信息行最右加悬浮歌词开关（`Icons.Filled.Lyrics` 裸图标，位置同 ShuYin，**横屏不加**），复用 `DesktopLyricsService`，无权限时跳 `ACTION_MANAGE_OVERLAY_PERMISSION`；⑤ 设置页 OpenList / WebDAV 副标题删「· 点此管理」。见 `AGENTS.md` §0.13。
+**2026-11-17 深夜三项再补**：① 悬浮歌词钮的图标换成 `Icons.Filled.Lyrics` 原 pathData（手抄进 `PlayerIcons.Lyrics`，EvenOdd 挖出三行歌词，不引 8MB 的 extended 包）；② 播放页三点菜单加「加入歌单」（歌曲信息 → 加入歌单 → 下载歌曲，复用 `PlaylistPickerDialog`，已加过显示「已加歌单」）。见 `AGENTS.md` §0.14。
+**2026-11-17 夜四项再改**：① 歌词图标拆两套——播放页 dock 与设置页「播放 → 歌词」改回**原始四条横线**，只有歌词页悬浮钮**和**设置页「桌面悬浮歌词」行保留 Material 气泡+音符（用户中途纠正过一次「桌面悬浮歌词不要改」）；② 顶栏「已暂停/正在播放」文字色 `TextSecondary` → `TextPrimary`；③ 删掉播放页顶部胶囊状态弹窗（`PlaybackNotice` 函数与调用全删，缓冲/断网只剩顶栏文字）；④ OpenList / WebDAV「路径」支持多行多目录（`splitRootPaths`，WebDAV 多目录时库内路径改成相对服务器根的绝对路径 + `effectiveRootPath`，文件夹 Tab 按最长命中目录归桶、名称逐 root 一条）。见 `AGENTS.md` §0.15。
+**2026-11-17 深夜返回键/关闭收尾**（用户报「无法使用返回关闭 app」，逐项确认后改）：① 返回键逐级返回——非「歌曲」类目先退回歌曲、二级页退二级页；歌曲类目按返回弹 `AlertDialog`，文案只有 `是否关闭软件` + `取消/确认`（无正文）；② 确认 = **完全关闭**：`PlaybackService.ACTION_SHUTDOWN`（停播 + 清队列 + 摘前台通知 + `stopSelf`，`START_NOT_STICKY`）+ `DesktopLyricsService.stop` + `finishAndRemoveTask()`；实测确认后回桌面、通知消失、`playbackState=NONE`、无音频焦点、进程降为缓存进程（`stopService` 会被 Media3 拉回，**不要退回**）；③ 多行路径框键盘由 `KeyboardType.Uri` 改 `Text`，能打回车（实测 `/yd/a`↵`/yd/b` 两行）；④ OpenList 保存后回填归一化路径；⑤ 删 `RemoteLibrarySyncer.normalizeRoot` 死代码，加 `RootPathsTest`（8 断言）。见 `AGENTS.md` §0.16。
+最近几轮（从旧到新）：2026-11-16 第十五轮 r16/r17/r18 补验 → 2026-11-17 `/dav` 播放修复 → 同日下午三项 → 同日傍晚六项 → 同日文档状态同步 → 同日代码审查修复 → 同日晚液态玻璃回滚 → 同日深夜五项缺陷修复 → 同日深夜五项收尾修正 → 同日深夜图标/加歌单 → 同日夜四项再改 → 同日深夜返回键/完全关闭，证据依次见 `AGENTS.md` §0.5 / §0.6 / §0.7 / §0.8 / §0.9 / §0.10 / §0.11 / §0.12 / §0.13 / §0.14 / §0.15 / §0.16 与 `05-progress.md` 末十节。
 
 ## 5. 常用命令（Windows PowerShell）
 
@@ -110,7 +121,7 @@ sh ../scripts/check.sh              # 完整性自检，不需要 JDK
 | `../archive/reference-shuyin/` | ShuYin 界面参考图（4 张） |
 | `../archive/reference-device-verification/` | 旧版设备验收截图（原 `docs/reference/device-verification`，2026-11-16 移出仓库） |
 | `../archive/design-proposals/` | 历史设计稿 HTML（`index.html`、`library/icons/lyrics-redesign.html`）与 v1.0 原型，2026-11-16 移出仓库 |
-| `../archive/deliverables/` | 给用户的「仅改动文件」zip，**只留最新一个**（交付新包时删旧包） |
+| `../archive/deliverables/` | 历史「仅改动文件」zip 归档。**2026-11-17 起用户要求改完不要打包交付、直接改项目文件**，该目录已清空且不再新增 |
 
 **目录纪律**（后续接手请遵守）：
 

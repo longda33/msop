@@ -11,6 +11,7 @@ import com.msop.player.core.network.WebDavClient
 import com.msop.player.core.network.WebDavException
 import com.msop.player.core.network.WebDavUrl
 import com.msop.player.core.network.userMessage
+import com.msop.player.feature.remote.RemoteCoverExtractor
 import com.msop.player.feature.remote.WebDavLibrarySyncer
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -33,6 +34,7 @@ class WebDavViewModel @Inject constructor(
     private val configStore: WebDavConfigStore,
     private val client: WebDavClient,
     private val syncer: WebDavLibrarySyncer,
+    private val remoteCovers: RemoteCoverExtractor,
 ) : ViewModel() {
 
     data class ProfileRow(
@@ -166,7 +168,15 @@ class WebDavViewModel @Inject constructor(
                     )
                     return@launch
                 }
-                val rootPath = WebDavUrl.normalizePath(current.rootPath.ifBlank { "/" })
+                // 2026-11-17 深夜（续）用户需求「路径支持填写多条（一行一条）」：
+                // 逐行归一化（空行丢掉），多行就按行存回；单行与原来的 normalizePath 完全一致。
+                val rootPath = current.rootPath.lines()
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .map { WebDavUrl.normalizePath(it) }
+                    .distinct()
+                    .joinToString("\n")
+                    .ifBlank { "/" }
                 val saved = configStore.upsert(
                     WebDavConfig(
                         id = current.editingId.orEmpty(),
@@ -374,6 +384,10 @@ class WebDavViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             runCatching { syncer.fillMissingDurations() }
                 .onSuccess { if (it > 0) refresh() }
+            // 2026-11-18（用户报「新添加服务器后封面不显示」）：新入库曲目没有封面，
+            // 同步完顺手探一轮，不用等下次冷启动。
+            runCatching { remoteCovers.extract() }
+                .onSuccess { if (it.covers > 0) refresh() }
         }
         return "同步完成：${stats.summary}"
     }

@@ -64,6 +64,7 @@ class ServerConfigStore @Inject constructor(
      * 取消启用不会删配置、也不会删曲库——曲库里这一台的歌会在下次同步时被
      * 差集清理掉（调用方负责立刻触发一次同步），和删除配置的语义区分开。
      */
+    @Synchronized
     fun setEnabled(id: String, enabled: Boolean) {
         if (id !in ids()) return
         val current = enabledIds()
@@ -109,6 +110,7 @@ class ServerConfigStore @Inject constructor(
      * 更新已有配置时会作废它自己的 JWT 与状态——账号/地址可能已经变了，
      * 继续沿用旧 token 或旧的「连接成功」都是误导。
      */
+    @Synchronized
     fun upsert(config: ServerConfig): ServerConfig {
         migrateLegacyIfNeeded()
         val existingIds = ids()
@@ -153,6 +155,7 @@ class ServerConfigStore @Inject constructor(
      * 只是配置层的删除；调用方（ViewModel）负责在删到启用项时清理该来源的曲目。
      * 删完若列表还有其它配置，启用项回落到第一条，避免出现「有配置但没启用」。
      */
+    @Synchronized
     fun delete(id: String) {
         val remaining = ids().filterNot { it == id }
         val enabled = enabledIds().filterNot { it == id }
@@ -170,12 +173,45 @@ class ServerConfigStore @Inject constructor(
     }
 
     /** 清空全部配置（「清除配置」按钮）。 */
+    @Synchronized
     fun clear() {
         prefs.edit().clear().apply()
     }
 
+    /**
+     * 备份恢复：按备份里的 profile id 原样写回。
+     *
+     * 2026-11-18：曲目的 id/uri 带 profile 前缀（`openlist:{profileId}:...`），
+     * 恢复时若走 `upsert()` 会分配新 id，老曲目就找不到配置了。这里整表覆盖并
+     * 保留原 id 与启用集合；一次恢复就是一次配置全量替换，符合用户预期。
+     */
+    @Synchronized
+    fun restoreAll(configs: List<ServerConfig>, enabledIds: List<String>) {
+        val ids = configs.map { it.id }.filter { it.isNotBlank() }.distinct()
+        require(ids.size == configs.size) { "备份中的服务器配置缺少稳定 id" }
+        val enabled = enabledIds.filter { it in ids }
+        prefs.edit().apply {
+            clear()
+            putBoolean(KEY_MIGRATED, true)
+            putString(KEY_IDS, ids.joinToString(","))
+            putString(KEY_ENABLED, enabled.joinToString(","))
+            if (enabled.isNotEmpty()) putString(KEY_ACTIVE, enabled.first())
+            configs.forEach { config ->
+                putString(key(config.id, FIELD_NAME), config.name.ifBlank { hostOf(config.baseUrl) })
+                putString(key(config.id, FIELD_URL), config.baseUrl)
+                putString(key(config.id, FIELD_USER), config.username)
+                putString(key(config.id, FIELD_PASSWORD), config.password)
+                putBoolean(key(config.id, FIELD_ALLOW_HTTP), config.allowPlainHttp)
+                putString(key(config.id, FIELD_APP_KEY), config.appKey)
+                putString(key(config.id, FIELD_ROOT), config.rootPath)
+                putInt(key(config.id, FIELD_CONCURRENCY), config.concurrency)
+            }
+        }.apply()
+    }
+
     // ---------------------------------------------------------------- 状态
 
+    @Synchronized
     fun saveStatus(id: String, status: ServerStatus, message: String) {
         prefs.edit()
             .putString(key(id, FIELD_STATUS), status.name)
@@ -191,6 +227,7 @@ class ServerConfigStore @Inject constructor(
 
     fun cachedToken(): String? = activeId()?.let { cachedToken(it) }
 
+    @Synchronized
     fun saveToken(id: String, token: String?) {
         if (token == null) prefs.edit().remove(key(id, FIELD_TOKEN)).apply()
         else prefs.edit().putString(key(id, FIELD_TOKEN), token).apply()
@@ -214,6 +251,7 @@ class ServerConfigStore @Inject constructor(
         markSynced(id, trackCount, atMillis)
     }
 
+    @Synchronized
     fun markSynced(id: String, trackCount: Int, atMillis: Long = System.currentTimeMillis()) {
         prefs.edit()
             .putInt(key(id, FIELD_SYNC_COUNT), trackCount)
@@ -294,7 +332,7 @@ class ServerConfigStore @Inject constructor(
         const val FIELD_ALLOW_HTTP = "allow_http"
         const val FIELD_APP_KEY = "app_key"
         const val FIELD_ROOT = "root"
-    const val FIELD_CONCURRENCY = "concurrency"
+        const val FIELD_CONCURRENCY = "concurrency"
         const val FIELD_TOKEN = "jwt"
         const val FIELD_STATUS = "status"
         const val FIELD_STATUS_MSG = "status_msg"

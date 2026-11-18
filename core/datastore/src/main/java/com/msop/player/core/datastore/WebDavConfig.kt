@@ -32,4 +32,37 @@ data class WebDavConfig(
     /** 列表里显示的一行标题：优先用户填的名字，否则退到主机名。 */
     val displayName: String
         get() = name.ifBlank { hostOf(baseUrl) }.ifBlank { "WebDAV 服务器" }
+
+    /**
+     * 音乐目录（2026-11-17 深夜用户需求「路径支持填写多条，一行一条」）。
+     *
+     * [rootPath] 允许换行写多个目录；这里按行切开、逐行归一化成「以 `/` 开头、不以 `/` 结尾」，
+     * 空行丢掉、重复去掉；一行都没写等于根目录 `/`。
+     */
+    val rootPaths: List<String>
+        get() = splitRootPaths(rootPath, default = "/")
+
+    /** 多目录时，库里的路径改成「相对服务器根」的绝对路径，所以换算 URL 的根必须是 `/`。 */
+    val effectiveRootPath: String
+        get() = if (rootPaths.size > 1) "/" else rootPaths.first()
+}
+
+/**
+ * 把设置页里填的「路径」文本（可多行）切成归一化的目录列表。
+ *
+ * 与 `WebDavUrl.normalizePath` 同口径（core:datastore 不能依赖 core:network，所以规则手写一份）：
+ * 去空白、`\` → `/`、折叠重复斜杠、补前导 `/`、去尾 `/`；空串与 `/` 都算根目录。
+ */
+internal fun splitRootPaths(raw: String, default: String): List<String> {
+    val paths = raw.lineSequence()
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .map { line ->
+            val collapsed = line.replace('\\', '/').replace(Regex("/{2,}"), "/")
+            val withRoot = if (collapsed.startsWith('/')) collapsed else "/$collapsed"
+            if (withRoot.length > 1) withRoot.trimEnd('/').ifBlank { "/" } else "/"
+        }
+        .distinct()
+        .toList()
+    return paths.ifEmpty { listOf(default) }
 }

@@ -177,8 +177,6 @@ fun MsopApp(
     val bottomInset = navBarInset + Dim.navBottomGap + miniArea + Dim.navHeight + 16.dp
 
     Box(Modifier.fillMaxSize()) {
-        AmbientBackground()
-
         CompositionLocalProvider(
             LocalSharedHazeState provides sharedHazeState,
             LocalLayerBackdrop provides layerBackdrop,
@@ -188,40 +186,47 @@ fun MsopApp(
             // 完全透明、以占位方式排在内容上方；底部胶囊/迷你条仍从 LayerBackdrop
             // 采样液态玻璃。hazeSource 是 P7-09 遗留，当前无消费者，保留不影响渲染。
             // 只让状态栏，内容一直铺到屏幕底部（底部由各屏的 bottomInset 接管）。
+            // 2026-11-17 晚：backdrop 录制子树必须自带不透明底。
+            // 此前 `AmbientBackground()` 是这一层的**兄弟**，被录进 layer 的只有「透明底 +
+            // 列表文字」，玻璃采到的其实是一张透明图：模糊与色彩没东西可作用，0.55 垫色
+            // 下面直接透出真列表，看着就是「没磨砂」。ShuYin 的页面背景就在录制子树里，
+            // 所以能糊成一片。把 AmbientBackground 挪进来，底色、模糊、色彩都才成立。
             Box(
                 Modifier
                     .fillMaxSize()
-                    .statusBarsPadding()
                     .hazeSource(sharedHazeState)
                     .layerBackdrop(layerBackdrop),
             ) {
-                NavHost(
-                    navController = navController,
-                    startDestination = "library",
-                    modifier = Modifier.fillMaxSize(),
-                    enterTransition = { fadeIn(tween(240)) },
-                    exitTransition = { fadeOut(tween(160)) },
-                    popEnterTransition = { fadeIn(tween(240)) },
-                    popExitTransition = { fadeOut(tween(160)) },
-                ) {
-                    composable("library") {
-                        LibraryScreen(
-                            vm = viewModel,
-                            onRescan = onRescan,
-                        )
-                    }
-                    composable("search") {
-                        SearchScreen(vm = viewModel)
-                    }
-                    composable("settings") {
-                        SettingsScreen(
-                            directories = directories,
-                            themeMode = themeMode,
-                            onThemeChange = onThemeChange,
-                            onAddDirectory = { treePicker.launch(null) },
-                            onRemoveDirectory = onRemoveDirectory,
-                            onRescan = onRescan,
-                        )
+                AmbientBackground()
+                Box(Modifier.fillMaxSize().statusBarsPadding()) {
+                    NavHost(
+                        navController = navController,
+                        startDestination = "library",
+                        modifier = Modifier.fillMaxSize(),
+                        enterTransition = { fadeIn(tween(240)) },
+                        exitTransition = { fadeOut(tween(160)) },
+                        popEnterTransition = { fadeIn(tween(240)) },
+                        popExitTransition = { fadeOut(tween(160)) },
+                    ) {
+                        composable("library") {
+                            LibraryScreen(
+                                vm = viewModel,
+                                onRescan = onRescan,
+                            )
+                        }
+                        composable("search") {
+                            SearchScreen(vm = viewModel)
+                        }
+                        composable("settings") {
+                            SettingsScreen(
+                                directories = directories,
+                                themeMode = themeMode,
+                                onThemeChange = onThemeChange,
+                                onAddDirectory = { treePicker.launch(null) },
+                                onRemoveDirectory = onRemoveDirectory,
+                                onRescan = onRescan,
+                            )
+                        }
                     }
                 }
             }
@@ -263,7 +268,14 @@ fun MsopApp(
                         durationMs = playback.durationMs,
                         onExpand = { playerOpen = true },
                         onToggle = { viewModel.toggle() },
-                        statusText = if (playback.networkLost) "网络已断开，播放已暂停" else null,
+                        // 2026-11-17 用户指令：点云端歌曲后迷你条要给反馈，不能像没反应。
+                        // isBuffering 由 Media3 的 STATE_BUFFERING 驱动，本地曲秒开不会闪。
+                        statusText = when {
+                            playback.networkLost -> "网络已断开，播放已暂停"
+                            playback.isBuffering && currentTrack.source != SourceType.LOCAL ->
+                                "正在连接云端，缓冲中…"
+                            else -> null
+                        },
                     )
                     // 2026-11-14（用户指令）：迷你条与导航栏的上下间距——ShuYin 实拍
                     // 参考约 8dp 的明确间隙；此前 2dp 视觉上贴死，恢复到 8dp。
@@ -322,6 +334,7 @@ fun MsopApp(
             QueueSheet(
                 queue = queue,
                 currentTrackId = playback.currentTrackId,
+                positionMs = positionMs,
                 onDismiss = { queueOpen = false },
                 onSelect = { index ->
                     viewModel.play(queue, index)

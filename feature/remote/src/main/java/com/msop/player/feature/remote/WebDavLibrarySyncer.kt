@@ -2,6 +2,7 @@ package com.msop.player.feature.remote
 
 import com.msop.player.core.common.log.AppLog
 import com.msop.player.core.database.dao.TrackDao
+import com.msop.player.core.database.dao.deleteByIdsChunked
 import com.msop.player.core.database.mapper.toEntity
 import com.msop.player.core.datastore.WebDavConfigStore
 import com.msop.player.core.model.SourceType
@@ -30,9 +31,10 @@ import javax.inject.Singleton
  * BFS 遍历，不递归；WebDAV 一次 PROPFIND 就能列完一个目录，没有分页。
  * 只清理 [SourceType.WEBDAV] 的幽灵条目，绝不碰本机与 OpenList。
  *
- * 两个安全阀：
+ * 三个安全阀：
  * - 一个文件都没扫到时不清理（多半是地址/权限配错）；
- * - 有目录列失败时也不清理（该目录下的曲目不能因为一次 403 就被当成已删除）。
+ * - 有目录列失败时也不清理（该目录下的曲目不能因为一次 403 就被当成已删除）；
+ * - 目录数触顶（循环引用 / 超大库）时不清理：剩余目录压根没扫，里面的曲目会落到 stale。
  */
 @Singleton
 class WebDavLibrarySyncer @Inject constructor(
@@ -56,9 +58,18 @@ class WebDavLibrarySyncer @Inject constructor(
             val directories = AtomicInteger()
             val failedDirectories = AtomicInteger()
 
-            configs.forEach { config ->
+            configs.forEach { stored ->
+                // 2026-11-17 深夜（续）用户需求「路径支持填写多条（一行一条）」：
+                // - 单目录：行为完全不变（从 `/` 往下走，库里路径相对该目录）。
+                // - 多目录：改用「相对服务器根」的绝对路径（根设成 `/`，每个目录各作一个起点），
+                //   这样不同目录下的同名文件不会撞成同一条 uri；播放换算走 effectiveRootPath。
+                val roots = stored.rootPaths
+                val multiRoot = roots.size > 1
+                val config = if (multiRoot) stored.copy(rootPath = "/") else stored
                 val perProfile = LinkedHashMap<String, Track>()
-                val pendingDirs = ArrayDeque<String>().apply { add("/") }
+                val pendingDirs = ArrayDeque<String>().apply {
+                    if (multiRoot) roots.forEach { add(it) } else add("/")
+                }
                 val localDirs = AtomicInteger()
                 // 「请求并发数」和 OpenList 侧同语义：0 用默认 4，按层并行列目录
                 val gate = Semaphore(config.effectiveConcurrency)
@@ -114,19 +125,27 @@ class WebDavLibrarySyncer @Inject constructor(
             }
 
             val (tracks, deduped) = RemoteDeduper.dedupe(raw.values)
-            // 时长是客户端探测出来的，重新同步要保住，不能被 0 覆盖
+            // 时长是客户端探测出来的，重新同步要保住，不能被 0 覆盖；
+            // 封面同理（2026-11-18 用户报「新加服务器后封面全没了」）：映射出来的
+            // `coverUri` 恒为 null，整行 upsert 会抹掉 `RemoteCoverExtractor` 已探测的路径。
             val previous = dao.bySource(SourceType.WEBDAV).associateBy { it.id }
             val merged = tracks.map { track ->
-                val kept = previous[track.id]?.durationMs ?: 0L
-                if (track.durationMs <= 0L && kept > 0L) track.copy(durationMs = kept) else track
+                val kept = previous[track.id]
+                track.copy(
+                    durationMs = if (track.durationMs <= 0L) kept?.durationMs ?: 0L else track.durationMs,
+                    coverUri = track.coverUri ?: kept?.coverUri,
+                )
             }
             val found = merged.associateBy { it.id }
             val stale = dao.idsBySource(SourceType.WEBDAV).toSet() - found.keys
-            val canClean = found.isNotEmpty() && failedDirectories.get() == 0
+            // 2026-11-18 修复：MAX_DIRECTORIES 触顶后剩余目录根本没扫，不能把它们
+            // 里面的曲目当成「云端已删除」。与 RemoteLibrarySyncer 的 pagesExhausted 同语义。
+            val directoriesExhausted = directories.get() >= MAX_DIRECTORIES
+            val canClean = found.isNotEmpty() && failedDirectories.get() == 0 && !directoriesExhausted
             if (found.isNotEmpty()) {
-                if (canClean && stale.isNotEmpty()) dao.deleteByIds(stale.toList())
+                if (canClean && stale.isNotEmpty()) dao.deleteByIdsChunked(stale)
                 dao.upsertAll(found.values.map { it.toEntity() })
-                if (failedDirectories.get() == 0) {
+                if (failedDirectories.get() == 0 && !directoriesExhausted) {
                     // 每台各记各的数量，不被合并总数覆盖
                     configs.forEach { config ->
                         val own = found.values.count { track ->
@@ -188,7 +207,7 @@ class WebDavLibrarySyncer @Inject constructor(
         val ids = dao.idsBySource(SourceType.WEBDAV).filter { id ->
             prefix == null || id.startsWith(prefix)
         }
-        if (ids.isNotEmpty()) dao.deleteByIds(ids)
+        if (ids.isNotEmpty()) dao.deleteByIdsChunked(ids)
     }
 
     private companion object {

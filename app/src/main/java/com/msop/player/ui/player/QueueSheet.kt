@@ -51,6 +51,7 @@ import com.msop.player.ui.components.GlassPill
 import com.msop.player.ui.components.IconAction
 import com.msop.player.ui.components.artSeed
 import com.msop.player.ui.icons.PlayerIcons
+import com.msop.player.ui.theme.LocalMsopPalette
 import com.msop.player.ui.theme.Palette
 import com.msop.player.ui.theme.Shapes
 
@@ -58,7 +59,9 @@ import com.msop.player.ui.theme.Shapes
  * 播放队列。用 ModalBottomSheet 而不是自己写拖拽面板：
  * 这里不需要跟手的复杂手势，M3 的面板已经够用，还自带返回键处理。
  *
- * 排序用手柄长按拖动。**拖动过程中不重排列表**——每跨一行就重组 LazyColumn
+ * 排序用手柄**长按**拖动（2026-11-17 深夜用户澄清：要的是「一个手指按住拖动按钮，
+ * 另一个手指可以滑动列表」——按住=抓取，不能一碰就把列表滚动抢走，已回滚成长按版）。
+ * **拖动过程中不重排列表**——每跨一行就重组 LazyColumn
  * 会让 pointerInput 重启、手势被吞掉；改为累计位移 + 高亮目标行，松手才调
  * [onMove] 一次。目标位置由纯函数 [QueueReorder.targetIndex] 计算。
  */
@@ -67,6 +70,8 @@ import com.msop.player.ui.theme.Shapes
 fun QueueSheet(
     queue: List<Track>,
     currentTrackId: String?,
+    /** 播放进度（2026-11-18 用户指令）：队列里正在播那一行右侧显示剩余时长并逐秒递减。 */
+    positionMs: Long = 0L,
     onDismiss: () -> Unit,
     onSelect: (Int) -> Unit,
     onMove: (Int, Int) -> Unit,
@@ -206,15 +211,27 @@ fun QueueSheet(
                             )
                         }
                         Text(
-                            text = track.durationMs.toDurationLabel(),
+                            // 2026-11-18 用户指令：正在播那一行显示「剩余」并逐秒递减
+                            text = if (current && track.durationMs > 0L) {
+                                val sec = ((track.durationMs - positionMs).coerceAtLeast(0L) + 999L) / 1000L
+                                "-%d:%02d".format(sec / 60, sec % 60)
+                            } else {
+                                track.durationMs.toDurationLabel()
+                            },
                             style = MaterialTheme.typography.labelSmall,
                             color = Palette.TextTertiary,
                         )
                         Spacer(Modifier.width(4.dp))
+                        // 2026-11-17（用户报「浅色模式 队列 拖动按钮看不见」+ 深夜澄清要
+                        // 「按住手柄、另一手指滑动列表」）：颜色不再写死白色 33%（浅底等于隐形），
+                        // 改主题感知；手势保持长按 500ms 起拖，不抢列表滚动。
+                        val isDark = LocalMsopPalette.current.isDark
+                        val idleHandleTint =
+                            if (isDark) Color.White.copy(alpha = 0.45f) else Color(0xFF20223A).copy(alpha = 0.42f)
                         Icon(
                             imageVector = PlayerIcons.DragHandle,
                             contentDescription = "长按拖动排序",
-                            tint = if (isDragging) Palette.BlueLight else Color(0x55FFFFFF),
+                            tint = if (isDragging) Palette.BlueLight else idleHandleTint,
                             modifier = Modifier
                                 .size(30.dp)
                                 .pointerInput(Unit) {

@@ -182,11 +182,12 @@ fun MiniPlayer(
     val isLightTheme = MaterialTheme.colorScheme.surface.luminance() >= 0.5f
     val surfaceColor =
         if (LiquidGlassMidEffects) {
-            // 2026-11-16 晚用户指令「迷你条 / 导航栏窗口背景透明度太高，改成和 ShuYin 一样」：
-            // ShuYin 的垫色在真机上是「能透出封面纹理但不糊」的档位，原来的 0.55/0.60
-            // 在浅色主题下几乎变成毛玻璃白片，压暗到 0.72/0.74 才接近参照效果。
-            if (isLightTheme) Color(0xFFFAFAFA).copy(0.72f)
-            else Color(0xFF121212).copy(0.74f)
+            // 2026-11-17 回滚：这层垫色曾被提到浅 0.90 / 深 0.92（用户先报「太透明」），
+            // 结果整条迷你条变成不透明色块，`vibrancy + blur + lens` 全部被盖住，
+            // 液态玻璃观感彻底消失。上游 ShuYin `MiniPlayerBar.kt` 用的是 0.55 / 0.60，
+            // 可读性靠 vibrancy 与纯黑/纯白字色保证，不靠垫色。
+            if (isLightTheme) Color(0xFFFAFAFA).copy(0.55f)
+            else Color(0xFF121212).copy(0.60f)
         } else {
             MaterialTheme.colorScheme.surface
         }
@@ -219,6 +220,8 @@ fun MiniPlayer(
                                 )
                             }
                         },
+                        // 2026-11-17 晚回滚：曾被加粗到 2dp 边 / 1dp 柔化 / White 0.62，
+                        // 用户看实物否掉（「效果难看」），回到上游原参数 1dp。
                         highlight = { Highlight.Default.copy(width = 1.dp) },
                         shadow = { Shadow(radius = 20.dp, alpha = 0.8f) },
                         innerShadow = {

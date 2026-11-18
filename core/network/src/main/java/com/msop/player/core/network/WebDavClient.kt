@@ -1,5 +1,6 @@
 package com.msop.player.core.network
 
+import com.msop.player.core.common.log.AppLog
 import com.msop.player.core.datastore.WebDavConfig
 import com.msop.player.core.datastore.WebDavConfigStore
 import okhttp3.Credentials
@@ -40,6 +41,7 @@ data class WebDavItem(
 @Singleton
 class WebDavClient @Inject constructor(
     private val configStore: WebDavConfigStore,
+    private val openListBridge: OpenListWebDavBridge,
 ) : StreamUrlResolver {
 
     private val http = OkHttpClient.Builder()
@@ -74,7 +76,7 @@ class WebDavClient @Inject constructor(
         val baseUrl = config.baseUrl.toHttpUrlOrNullSafe()
 
         return WebDavMultiStatusParser.parse(xml).mapNotNull { entry ->
-            val itemPath = WebDavUrl.pathFromHref(entry.href, baseUrl, config.rootPath)
+            val itemPath = WebDavUrl.pathFromHref(entry.href, baseUrl, config.effectiveRootPath)
                 ?: return@mapNotNull null
             if (itemPath == requestedPath) return@mapNotNull null
 
@@ -96,19 +98,38 @@ class WebDavClient @Inject constructor(
         }
     }
 
-    /** 播放地址就是「服务器地址 + 根路径 + 文件路径」，不需要像 OpenList 那样换直链。 */
+    /**
+     * 普通 WebDAV：播放地址就是「服务器地址 + 根路径 + 文件路径」。
+     *
+     * 2026-11-17 补：当 WebDAV 地址是 OpenList 的 `/dav` 端点时，PROPFIND 能列目录，
+     * 但文件 GET 实测 403（不带 Basic 则 401），歌同步得进来却放不出来。此时改走
+     * [OpenListWebDavBridge] 用原生 REST 换一条可 Range 的临时直链；非 OpenList 的
+     * WebDAV 服务保持原样。直链绝不入库，每次起播/seek 都会重新解析。
+     */
     override fun resolve(internalUri: String): String {
         val parsed = WebDavUrl.parseInternalUri(internalUri) ?: return internalUri
         val config = resolveConfig(parsed.profileId)
         ensureAllowed(config)
-        return WebDavUrl.buildUrl(config.baseUrl, config.rootPath, parsed.path).toString()
+        openListBridge.rawUrlOrNull(config, parsed.path)?.let {
+            AppLog.d("WebDAV→OpenList 原生直链解析成功：$internalUri")
+            return it
+        }
+        return WebDavUrl.buildUrl(config.baseUrl, config.effectiveRootPath, parsed.path).toString()
     }
 
-    /** Basic Auth 只发给 WebDAV 曲目；本地与 OpenList 不附加任何请求头。 */
+    /**
+     * Basic Auth 只发给普通 WebDAV 曲目；本地、OpenList 不附加任何请求头。
+     * 走 [OpenListWebDavBridge] 拿到 raw_url 后必须返回空 map——实测直链带
+     * Authorization 会 401（与 OpenList 原生 REST 同一条规律）。
+     */
     override fun headers(internalUri: String): Map<String, String> {
         if (!internalUri.startsWith(WebDavUrl.SCHEME)) return emptyMap()
         val profileId = WebDavUrl.parseInternalUri(internalUri)?.profileId
-        val config = runCatching { resolveConfig(profileId) }.getOrNull() ?: return emptyMap()
+        // 2026-11-17 修复：这里必须和 resolve() 走同一条明文闸门。
+        // 否则「播放」和「探测时长 / 歌词」会绕过确认，照样把 Basic 凭据发到 http:// 上。
+        val config = runCatching { resolveConfig(profileId).also(::ensureAllowed) }.getOrNull()
+            ?: return emptyMap()
+        if (openListBridge.hasSession(config)) return emptyMap()
         return mapOf("Authorization" to Credentials.basic(config.username, config.password))
     }
 
@@ -137,7 +158,9 @@ class WebDavClient @Inject constructor(
     }
 
     private fun collectionUrl(config: WebDavConfig, path: String): HttpUrl {
-        val url = WebDavUrl.buildUrl(config.baseUrl, config.rootPath, path)
+        // 多目录配置时库里存的是「相对服务器根」的绝对路径，根必须按 `/` 算，
+        // 否则 `/yd/music` 会被当成相对路径再拼一次（2026-11-17 深夜）。
+        val url = WebDavUrl.buildUrl(config.baseUrl, config.effectiveRootPath, path)
         return if (url.encodedPath.endsWith('/')) {
             url
         } else {

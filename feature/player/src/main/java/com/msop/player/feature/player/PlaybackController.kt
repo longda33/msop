@@ -129,21 +129,30 @@ class PlaybackController @Inject constructor(
         val controller = requireController()
         sourceById = tracks.associate { it.id to it.source }
         applyMode(controller, mode)
+        val index = startIndex.coerceIn(0, tracks.lastIndex)
         controller.setMediaItems(
             tracks.map { it.toMediaItem() },
-            startIndex.coerceIn(0, tracks.lastIndex),
+            index,
             0L,
         )
         controller.prepare()
         controller.play()
-        pauseRemoteIfOffline()
+        // 2026-11-17 修复：起播瞬间就按「这次要播的那一首」判断来源。
+        // 原来读 `controller.currentMediaItem`，而 MediaController 的队列状态是异步同步的，
+        // 此时还是 null → 直接 return，离线点播远程曲目要等几秒才被兜住。
+        pauseRemoteIfOffline(source = tracks[index].source, requestedPlaying = true)
     }
 
     suspend fun toggle() = withContext(Dispatchers.Main.immediate) {
         val controller = requireController()
         if (controller.mediaItemCount == 0) return@withContext
-        if (controller.isPlaying) controller.pause() else controller.play()
-        pauseRemoteIfOffline()
+        val willPlay = !controller.isPlaying
+        if (willPlay) controller.play() else controller.pause()
+        // 明确告诉断网判定「用户这次是想播还是想停」：想播才提示网络问题，
+        // 主动暂停时不弹「网络断开」
+        val source = _state.value.currentSource
+            ?: controller.currentMediaItem?.mediaId?.let { sourceById[it] }
+        pauseRemoteIfOffline(source = source, requestedPlaying = willPlay)
     }
 
     /**
@@ -256,16 +265,22 @@ class PlaybackController @Inject constructor(
         val index = restored.index.coerceIn(0, tracks.lastIndex)
         val controller = requireController()
         sourceById = tracks.associate { it.id to it.source }
+        // 2026-11-17 修复：原来手工置 true/置 false，中间任何一个 setMediaItems/prepare
+        // 抛异常，suppressSnapshotSave 就永远停在 true —— 之后所有快照都被静默丢弃，
+        // 冷启动再也恢复不了播放现场。改成 try/finally 保证一定复位。
         suppressSnapshotSave = true
-        applyMode(
-            controller,
-            runCatching { PlayMode.valueOf(snapshot.playMode) }.getOrDefault(PlayMode.SEQUENTIAL),
-        )
-        controller.setMediaItems(tracks.map { it.toMediaItem() }, index, restored.positionMs)
-        controller.playWhenReady = false
-        controller.prepare()
-        publish(controller)
-        suppressSnapshotSave = false
+        try {
+            applyMode(
+                controller,
+                runCatching { PlayMode.valueOf(snapshot.playMode) }.getOrDefault(PlayMode.SEQUENTIAL),
+            )
+            controller.setMediaItems(tracks.map { it.toMediaItem() }, index, restored.positionMs)
+            controller.playWhenReady = false
+            controller.prepare()
+            publish(controller)
+        } finally {
+            suppressSnapshotSave = false
+        }
         AppLog.i("已恢复播放现场：${tracks.size} 首，第 ${index + 1} 首，${restored.positionMs}ms")
         RestoredSession(tracks, index, restored.positionMs)
     }
@@ -278,7 +293,12 @@ class PlaybackController @Inject constructor(
         snapshotWasPlaying = player.isPlaying
 
         if (player.isPlaying) {
-            if (snapshotTicker?.isActive == true) return
+            if (snapshotTicker?.isActive == true) {
+                // 2026-11-17 修复：播放中切歌/暂停时 ticker 还活着，原来直接 return，
+                // 切歌那一刻的现场要等下一个 5 秒才落盘——这期间被杀进程就只能恢复成上一首。
+                if (force) saveSnapshot(force = true)
+                return
+            }
             snapshotTicker = scope.launch {
                 while (isActive) {
                     saveSnapshot(force = true)
@@ -362,7 +382,7 @@ class PlaybackController @Inject constructor(
      * 本地文件断网照常播；用户主动暂停时断网也不弹提示。
      * 起播/切歌时也会主动调一次，覆盖「离线状态下点播放」的情况。
      */
-    private fun pauseRemoteIfOffline() {
+    private fun pauseRemoteIfOffline(source: SourceType? = null, requestedPlaying: Boolean? = null) {
         if (networkMonitor.isOnline()) {
             if (networkLost) {
                 networkLost = false
@@ -370,16 +390,20 @@ class PlaybackController @Inject constructor(
             }
             return
         }
-        val player = controller ?: return
-        val id = player.currentMediaItem?.mediaId ?: return
-        val source = sourceById[id] ?: return
-        if (source == SourceType.LOCAL) return
-        if (!player.playWhenReady) return
+        // 来源优先用调用方给的「这次操作针对的那一首」，拿不到才回落到控制器/状态里的当前曲
+        val target = source
+            ?: controller?.currentMediaItem?.mediaId?.let { sourceById[it] }
+            ?: _state.value.currentTrackId?.let { sourceById[it] }
+        if (target == null || target == SourceType.LOCAL) return
 
-        player.pause()
+        // 用户主动暂停时断网不弹提示；没传意图才读控制器
+        val wantsPlay = requestedPlaying ?: controller?.playWhenReady ?: false
+        if (!wantsPlay) return
+
+        controller?.pause()
         networkLost = true
         _state.value = _state.value.copy(isPlaying = false, networkLost = true)
-        AppLog.i("网络断开，远程曲目已自动暂停")
+        AppLog.i("网络断开，远程曲目已自动暂停 source=$target")
     }
 
     private fun Player.playMode(): PlayMode = when {

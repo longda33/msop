@@ -41,6 +41,12 @@ data class ServerBackup(
     val appKey: String = "",
     /** 2026-11-15 起随备份导出；旧备份无此字段，反序列化为 ""。 */
     val password: String = "",
+    /** 2026-11-18 多 profile：保留 id 才能让曲目里的 openlist:{id}:... 继续解析。 */
+    val id: String = "",
+    val name: String = "",
+    val rootPath: String = "",
+    val concurrency: Int = 0,
+    val enabled: Boolean = true,
 )
 
 /**
@@ -54,6 +60,11 @@ data class WebDavBackup(
     val rootPath: String = "/",
     val allowPlainHttp: Boolean = false,
     val password: String = "",
+    /** 2026-11-18 多 profile，同 [ServerBackup]。 */
+    val id: String = "",
+    val name: String = "",
+    val concurrency: Int = 0,
+    val enabled: Boolean = true,
 )
 
 @Serializable
@@ -62,9 +73,13 @@ data class SettingsBackup(
     val equalizerEnabled: Boolean = false,
     val equalizerPreset: String? = null,
     val equalizerLevels: List<Int> = emptyList(),
+    /** 单条形式保留给旧备份 / 旧版本 App 读取；新备份同时写 servers/webDavs。 */
     val server: ServerBackup? = null,
     /** P7-07 新增；旧备份没有这个字段，反序列化为 null。 */
     val webDav: WebDavBackup? = null,
+    /** 2026-11-18：多台服务器同时启用，必须整表备份，否则恢复后 id 与曲目脱节。 */
+    val servers: List<ServerBackup> = emptyList(),
+    val webDavs: List<WebDavBackup> = emptyList(),
 )
 
 /** 备份/恢复的可展示结果。 */

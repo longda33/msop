@@ -74,6 +74,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.msop.player.core.model.Playlist
 import com.msop.player.core.model.SourceType
 import com.msop.player.core.model.Track
+import com.msop.player.feature.player.PlayMode
 import com.msop.player.ui.components.CircleGlassButton
 import com.msop.player.ui.components.CoverThumb
 import com.msop.player.ui.components.EmptyHint
@@ -137,8 +138,54 @@ fun PlaylistTab(
     Column(modifier.fillMaxSize()) {
         // 标题栏是曲库外壳的毛玻璃层，列表首项要让开它，否则被压住
         Spacer(Modifier.height(topInset))
+        // 2026-11-17：收藏条目要求「置顶」。当前 Compose foundation 1.12 没有
+        // stickyHeader DSL，直接把标题 + 收藏条放在 LazyColumn 外面，滚动列表时保持固定。
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Dim.screen, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = "歌单",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Palette.TextPrimary,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = "${playlists.size} 个歌单 · 收藏置顶 · 按住右侧手柄可拖动排序",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Palette.TextTertiary,
+                        modifier = Modifier.padding(top = 3.dp),
+                    )
+                }
+                CircleGlassButton(
+                    icon = Icons.Filled.Add,
+                    contentDescription = "新建歌单",
+                    onClick = { createOpen = true },
+                    size = 34.dp,
+                    iconSize = 18.dp,
+                    tint = Palette.BlueLight,
+                    container = Palette.Blue.copy(alpha = 0.14f),
+                )
+            }
+            FavoritesRow(
+                count = favorites.size,
+                coverUri = favorites.firstOrNull()?.coverUri,
+                onClick = { onOpenDetail(favoritesPlaylist) },
+            )
+        }
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
             contentPadding = PaddingValues(
                 start = Dim.screen,
                 end = Dim.screen,
@@ -147,46 +194,6 @@ fun PlaylistTab(
             ),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            text = "歌单",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Palette.TextPrimary,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(
-                            text = "${playlists.size} 个歌单 · 收藏置顶 · 按住右侧手柄可拖动排序",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Palette.TextTertiary,
-                            modifier = Modifier.padding(top = 3.dp),
-                        )
-                    }
-                    CircleGlassButton(
-                        icon = Icons.Filled.Add,
-                        contentDescription = "新建歌单",
-                        onClick = { createOpen = true },
-                        size = 34.dp,
-                        iconSize = 18.dp,
-                        tint = Palette.BlueLight,
-                        container = Palette.Blue.copy(alpha = 0.14f),
-                    )
-                }
-            }
-            // 置顶：收藏歌曲
-            item(key = "favorites") {
-                FavoritesRow(
-                    count = favorites.size,
-                    coverUri = favorites.firstOrNull()?.coverUri,
-                    onClick = { onOpenDetail(favoritesPlaylist) },
-                )
-            }
             itemsIndexed(items = shown, key = { _, playlist -> playlist.id }) { index, playlist ->
                 PlaylistRow(
                     playlist = playlist,
@@ -289,7 +296,11 @@ fun PlaylistDetailPage(
     allTracks: List<Track>,
     currentTrackId: String?,
     isPlaying: Boolean,
+    playMode: PlayMode,
+    positionMs: Long = 0L,
     onPlay: (List<Track>, Int) -> Unit,
+    onToggle: () -> Unit,
+    onSetPlayMode: (PlayMode) -> Unit,
     onBack: () -> Unit,
 ) {
     var renameTarget by remember { mutableStateOf<Playlist?>(null) }
@@ -303,7 +314,11 @@ fun PlaylistDetailPage(
         allTracks = allTracks,
         currentTrackId = currentTrackId,
         isPlaying = isPlaying,
+        positionMs = positionMs,
+        playMode = playMode,
         onPlay = onPlay,
+        onToggle = onToggle,
+        onSetPlayMode = onSetPlayMode,
         onBack = onBack,
         onRename = { renameTarget = it },
         onDelete = { deleteTarget = it },
@@ -492,7 +507,7 @@ private fun FavoritesRow(
                 )
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    text = "置顶 · 播放页点爱心即收藏",
+                    text = "收藏",
                     style = MaterialTheme.typography.labelSmall,
                     color = Palette.TextTertiary,
                 )
@@ -514,7 +529,11 @@ private fun PlaylistDetail(
     allTracks: List<Track>,
     currentTrackId: String?,
     isPlaying: Boolean,
+    positionMs: Long = 0L,
+    playMode: PlayMode,
     onPlay: (List<Track>, Int) -> Unit,
+    onToggle: () -> Unit,
+    onSetPlayMode: (PlayMode) -> Unit,
     onBack: () -> Unit,
     onRename: (Playlist) -> Unit,
     onDelete: (Playlist) -> Unit,
@@ -523,6 +542,9 @@ private fun PlaylistDetail(
     val tracks by remember(playlist.id) {
         if (isFavorites) playlistVm.favorites else playlistVm.tracks(playlist.id)
     }.collectAsStateWithLifecycle(emptyList())
+    // 播放/随机按钮要有即时可见的反馈：正在放本歌单的歌时显示暂停，随机模式高亮。
+    val playingThisList = isPlaying && currentTrackId != null && tracks.any { it.id == currentTrackId }
+    val shuffleOn = playMode == PlayMode.SHUFFLE
     val allPlaylists by playlistVm.playlists.collectAsStateWithLifecycle()
     val favoriteIds by playlistVm.favoriteIds.collectAsStateWithLifecycle()
     var pickerOpen by remember { mutableStateOf(false) }
@@ -721,25 +743,36 @@ private fun PlaylistDetail(
                                     modifier = Modifier
                                         .size(34.dp)
                                         .clip(CircleShape)
-                                        .background(Color.White)
-                                        .clickable { if (tracks.isNotEmpty()) onPlay(tracks, 0) },
+                                        // 2026-11-17：浅色主题下原来的白底 + Palette.Ink（浅色也是近白）
+                                        // 等于看不见按钮，固定蓝底白图标，两种主题都清晰。
+                                        .background(Palette.Blue)
+                                        .clickable {
+                                            if (tracks.isEmpty()) return@clickable
+                                            if (playingThisList) onToggle() else onPlay(tracks, 0)
+                                        },
                                     contentAlignment = Alignment.Center,
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Filled.PlayArrow,
-                                        contentDescription = "播放全部",
-                                        tint = Palette.Ink,
+                                        imageVector = if (playingThisList) PlayerIcons.Pause else Icons.Filled.PlayArrow,
+                                        contentDescription = if (playingThisList) "暂停" else "播放全部",
+                                        tint = Color.White,
                                         modifier = Modifier.size(19.dp),
                                     )
                                 }
                                 CircleGlassButton(
                                     icon = PlayerIcons.Shuffle,
-                                    contentDescription = "随机播放",
-                                    onClick = { if (tracks.isNotEmpty()) onPlay(tracks.shuffled(), 0) },
+                                    contentDescription = if (shuffleOn) "关闭随机播放" else "随机播放",
+                                    onClick = {
+                                        if (tracks.isEmpty()) return@CircleGlassButton
+                                        val enableShuffle = !shuffleOn
+                                        onSetPlayMode(if (enableShuffle) PlayMode.SHUFFLE else PlayMode.SEQUENTIAL)
+                                        // 立即用新顺序起播，按钮高亮 + 队列同时变化，点击有反馈
+                                        onPlay(if (enableShuffle) tracks.shuffled() else tracks, 0)
+                                    },
                                     size = 34.dp,
                                     iconSize = 17.dp,
-                                    tint = Palette.BlueLight,
-                                    container = Palette.Blue.copy(alpha = 0.16f),
+                                    tint = if (shuffleOn) Color.White else Palette.BlueLight,
+                                    container = if (shuffleOn) Palette.Blue else Palette.Blue.copy(alpha = 0.16f),
                                 )
                             }
                         }
@@ -768,6 +801,12 @@ private fun PlaylistDetail(
                         isCurrent = track.id == currentTrackId,
                         isPlaying = isPlaying,
                         onClick = { onPlay(shownTracks, index) },
+                        // 2026-11-18 用户指令：正在播那一行右侧显示剩余时长并逐秒递减
+                        remainingMs = if (track.id == currentTrackId && track.durationMs > 0L) {
+                            (track.durationMs - positionMs).coerceAtLeast(0L)
+                        } else {
+                            null
+                        },
                         onRemove = if (isFavorites) {
                             // 2026-11-16 晚用户指令：收藏歌曲的三点菜单里删掉「从歌单移除」，
                             // 行级 onRemove 也一起掐掉（TrackRow 会回落到它），

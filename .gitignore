@@ -25,3 +25,7 @@ app/release.jks
 keystore.properties
 *.jks
 *.keystore
+
+# 真机验证临时产物：可能含设备配置备份/凭据，绝不入库
+.tmp-device-verify/
+.playwright-cli/

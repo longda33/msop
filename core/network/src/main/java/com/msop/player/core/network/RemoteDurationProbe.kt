@@ -1,10 +1,5 @@
 package com.msop.player.core.network
 
-import java.io.IOException
-import java.util.concurrent.TimeUnit
-import okhttp3.OkHttpClient
-import okhttp3.Request
-
 /**
  * 云端曲目时长探测（2026-11-16 用户反馈「歌曲时间也没有」）。
  *
@@ -20,15 +15,10 @@ import okhttp3.Request
  *
  * 只取头部字节，不下载整首歌；解析失败返回 null，界面继续显示 `--:--`，
  * 不影响同步与播放。
+ *
+ * 2026-11-18：Range 读取收敛到 [RemoteRangeReader]，与封面/歌词探测共用限长实现。
  */
 object RemoteDurationProbe {
-
-    private val http = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
-        .callTimeout(20, TimeUnit.SECONDS)
-        .followRedirects(true)
-        .build()
 
     private const val HEAD_BYTES = 65_536L
     private const val TAIL_BYTES = 32_768L
@@ -38,7 +28,7 @@ object RemoteDurationProbe {
      * @param headers 额外的鉴权头（WebDAV 需要 Basic Auth）
      */
     fun durationMs(url: String, headers: Map<String, String> = emptyMap(), fileSize: Long? = null): Long? {
-        val head = range(url, headers, 0L, HEAD_BYTES)
+        val head = RemoteRangeReader.range(url, headers, 0L, HEAD_BYTES)
         head?.let { bytes ->
             fromFlac(bytes)?.let { return it }
             fromWav(bytes)?.let { return it }
@@ -47,7 +37,7 @@ object RemoteDurationProbe {
             // 实测还有「.mp3 后缀其实是带 ID3 的 FLAC」，所以按标签长度再取一段重新判格式
             val id3 = id3End(bytes)
             if (id3 != null && id3 + 8 >= bytes.size.toLong()) {
-                range(url, headers, id3, HEAD_BYTES)?.let { p ->
+                RemoteRangeReader.range(url, headers, id3, HEAD_BYTES)?.let { p ->
                     fromFlac(p)?.let { return it }
                     fromWav(p)?.let { return it }
                     fromMp4(p)?.let { return it }
@@ -65,7 +55,7 @@ object RemoteDurationProbe {
             fromMp3(payload, fileSize)?.let { return it }
         }
         // moov 在文件尾部是 MP4 的常见布局，头部找不到 mvhd 就再取一次尾部
-        val tail = range(url, headers, null, TAIL_BYTES)
+        val tail = RemoteRangeReader.range(url, headers, null, TAIL_BYTES)
         tail?.let { bytes ->
             fromMp4(bytes)?.let { return it }
             fromMp3(bytes, fileSize)?.let { return it }
@@ -80,31 +70,6 @@ object RemoteDurationProbe {
             ((b[8].toLong() and 0xff) shl 7) or (b[9].toLong() and 0xff)
         val footer = if ((b[5].toInt() and 0x10) != 0) 10L else 0L
         return 10 + size + footer
-    }
-
-    // ---------------------------------------------------------------- HTTP
-
-    private fun range(
-        url: String,
-        headers: Map<String, String>,
-        start: Long?,
-        length: Long,
-    ): ByteArray? {
-        val rangeValue = if (start == null) "bytes=-$length" else "bytes=$start-${start + length - 1}"
-        val builder = Request.Builder().url(url).header("Range", rangeValue).get()
-        headers.forEach { (k, v) -> builder.header(k, v) }
-        return try {
-            http.newCall(builder.build()).execute().use { resp ->
-                if (!resp.isSuccessful) return null
-                val bytes = resp.body.bytes()
-                // 服务器不支持 Range 时会把整首歌吐回来，这里直接放弃，避免把大文件读进内存
-                if (bytes.size > length * 8) null else bytes
-            }
-        } catch (e: IOException) {
-            null
-        } catch (e: Exception) {
-            null
-        }
     }
 
     // ---------------------------------------------------------------- FLAC
@@ -160,7 +125,10 @@ object RemoteDurationProbe {
                 }
                 tag(b, i, "data") -> dataBytes = size
             }
-            if (size <= 0L) break
+            // 2026-11-17 修复：chunk 长度是从文件里读出来的 32 位值，遇到损坏/伪造的
+            // WAV 可能大得离谱，`size.toInt()` 会变成负数 → i 反向跑、死循环。
+            // 超出本次读取范围就直接放弃。
+            if (size <= 0L || size > b.size) break
             i += 8 + size.toInt()
             if (dataBytes > 0L) break
         }
@@ -230,6 +198,8 @@ object RemoteDurationProbe {
     private fun fromMp4(b: ByteArray): Long? {
         val idx = indexOfTag(b, "mvhd")
         if (idx < 0) return null
+        // `mvhd` 恰好落在缓冲区最后 4 个字节时，下面的 version 读取会越界。
+        if (idx + 5 > b.size) return null
         val version = b[idx + 4].toInt() and 0xff
         val payload = idx + 4
         return if (version == 1) {

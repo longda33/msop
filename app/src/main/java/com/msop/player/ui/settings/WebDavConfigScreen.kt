@@ -373,6 +373,8 @@ private fun WebDavEditor(
             hint = "/music 或 /（不填按根目录）",
             onValueChange = vm::onRootPathChange,
             keyboardType = KeyboardType.Uri,
+            multiLine = true,
+            note = "可以填多条，一行一个目录；不填按根目录 /。",
         )
         ConfigField(
             label = "请求并发数（可选）",
@@ -514,6 +516,8 @@ private fun ConfigField(
     keyboardType: KeyboardType,
     isPassword: Boolean = false,
     note: String? = null,
+    /** 2026-11-17 深夜（续）用户需求「路径支持填写多条，一行一条」：路径框要能换行。 */
+    multiLine: Boolean = false,
 ) {
     Column(Modifier.fillMaxWidth()) {
         OutlinedTextField(
@@ -521,14 +525,19 @@ private fun ConfigField(
             onValueChange = onValueChange,
             label = { Text(label) },
             placeholder = { Text(hint) },
-            singleLine = true,
+            singleLine = !multiLine,
+            minLines = if (multiLine) 3 else 1,
             textStyle = TextStyle(color = Palette.TextPrimary),
             visualTransformation = if (isPassword) {
                 PasswordVisualTransformation()
             } else {
                 VisualTransformation.None
             },
-            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+            // 2026-11-17 深夜（五）：多行时必须换 Text 键盘——Uri 键盘只有「前往」键、
+            // 打不出换行，多条目录就没法一行一条输入。
+            keyboardOptions = KeyboardOptions(
+                keyboardType = if (multiLine) KeyboardType.Text else keyboardType,
+            ),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = Dim.screen, vertical = 6.dp),

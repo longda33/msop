@@ -30,12 +30,16 @@ object CacheDecision {
         internalUri.startsWith(ServerUrl.SCHEME) || internalUri.startsWith(WebDavUrl.SCHEME)
 
     /**
-     * 由稳定内部 URI 生成缓存 key。附带 query / fragment 时剥掉，
-     * 保证「同一路径 + 不同一次性签名」落到同一个 key 上。
+     * 由稳定内部 URI 生成缓存 key。
+     *
+     * 2026-11-18 修复：入参已经是干净的内部 URI（`openlist:{id}:/路径`、webdav 同），
+     * 一次性签名只存在于 resolver 解析出的 raw_url 上，不会进到这里。原实现对入参
+     * 做 `substringBefore('?')/#`，反而把文件名里合法含有的 `?`/`#` 截掉，
+     * 让 `A?1.flac` 与 `A#1.flac` 落到同一个 key、缓存命中后播放另一首歌。
      */
     fun stableKey(internalUri: String): String {
         require(isRemote(internalUri)) { "缓存 key 只能由远程内部 URI 生成：$internalUri" }
-        return KEY_PREFIX + internalUri.substringBefore('#').substringBefore('?')
+        return KEY_PREFIX + internalUri
     }
 
     /**
@@ -71,16 +75,21 @@ class MediaCachePolicy @Inject constructor(
     }
 
     /** `true` = 蜂窝/计费网络，`false` = Wi-Fi 等不计费网络，`null` = 未知。 */
-    private fun currentNetworkMetered(): Boolean? = runCatching {
-        val manager = connectivity ?: return null
-        val network = manager.activeNetwork ?: return null
-        val caps = manager.getNetworkCapabilities(network) ?: return null
-        // Android SDK 里没有 NET_CAPABILITY_METERED（只有正向能力 NET_CAPABILITY_NOT_METERED），
-        // 所以「计费」= 蜂窝网络，或系统没给它标「不计费」（用户把某个 Wi-Fi 设成按流量计费）。
-        caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
-            !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
-    }.getOrElse {
-        AppLog.w("读取网络计费状态失败：${it.message}")
-        null
+    private fun currentNetworkMetered(): Boolean? {
+        // 2026-11-17 重构：原来是 runCatching { ... return null ... }.getOrElse { null }，
+        // lambda 里的 `return null` 是非局部返回，直接跳出函数——runCatching 的
+        // 兜底分支其实永远不会拿到「查不到网络」。改成显式 try/catch，语义一眼可读。
+        return try {
+            val manager = connectivity ?: return null
+            val network = manager.activeNetwork ?: return null
+            val caps = manager.getNetworkCapabilities(network) ?: return null
+            // Android SDK 里没有 NET_CAPABILITY_METERED（只有正向能力 NET_CAPABILITY_NOT_METERED），
+            // 所以「计费」= 蜂窝网络，或系统没给它标「不计费」（用户把某个 Wi-Fi 设成按流量计费）。
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
+                !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+        } catch (e: Exception) {
+            AppLog.w("读取网络计费状态失败：${e.message}")
+            null
+        }
     }
 }

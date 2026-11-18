@@ -1,6 +1,7 @@
 package com.msop.player.feature.local.scan
 
 import com.msop.player.core.database.dao.TrackDao
+import com.msop.player.core.database.dao.deleteByIdsChunked
 import com.msop.player.core.database.mapper.toEntity
 import com.msop.player.core.database.mapper.toTrack
 import com.msop.player.core.model.SourceType
@@ -41,8 +42,8 @@ class RoomLocalTrackStore(
     }
 
     override suspend fun deleteByIds(ids: List<String>) {
-        if (ids.isEmpty()) return
-        dao.deleteByIds(ids)
+        // 全量扫描时「文件被删掉」的曲目可能一次上千条，直连 SQL 会撞绑定变量上限
+        dao.deleteByIdsChunked(ids)
     }
 
     override suspend fun count(): Int = dao.count()

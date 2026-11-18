@@ -227,6 +227,13 @@ fun TrackRow(
     showCover: Boolean = true,
     onRemove: (() -> Unit)? = null,
     menu: TrackMenuActions = TrackMenuActions(),
+    /**
+     * 当前播放曲目的剩余毫秒数（2026-11-18 用户指令「列表行右侧时长点击播放时变化，不要静态」）。
+     *
+     * 只有正在播的那一行传非 null，右侧就从「总时长」切成「剩余时长」并随播放递减；
+     * 其它行仍传 null，保持原来的静态总时长（不参与每秒重组）。
+     */
+    remainingMs: Long? = null,
     /** 歌单内拖动排序：给了这个就显示拖动手柄（按住手柄整行跟手）。 */
     dragHandle: (@Composable () -> Unit)? = null,
 ) {
@@ -301,7 +308,13 @@ fun TrackRow(
                 Spacer(Modifier.width(8.dp))
             }
             Text(
-                text = track.durationMs.toDurationLabel(),
+                // 2026-11-18 用户指令：正在播的那一行显示「剩余」并逐秒递减（`-5:47`），
+                // 其余行仍是静态总时长。
+                text = if (isCurrent && remainingMs != null) {
+                    remainingLabel(remainingMs)
+                } else {
+                    track.durationMs.toDurationLabel()
+                },
                 style = MaterialTheme.typography.labelSmall,
                 color = Palette.TextTertiary,
             )
@@ -412,7 +425,9 @@ fun TrackRow(
                     // 「移动到其它歌单」整项移除（批量操作条里的「移动」保留，那是多选语义）。
                     (menu.onRemoveFromPlaylist ?: onRemove)?.let { remove ->
                         DropdownMenuItem(
-                            text = { Text("从歌单移除", color = Palette.Red) },
+                            // 2026-11-17 用户指令：文案改为「移除歌单」，行为不变
+                            // （仍是从当前歌单移除这一首，不是删除整个歌单）。
+                            text = { Text("移除歌单", color = Palette.Red) },
                             leadingIcon = { Icon(Icons.Filled.Delete, null, tint = Palette.Red) },
                             onClick = {
                                 menuOpen = false
@@ -517,9 +532,16 @@ private class TrackPickerState {
     }
 }
 
-/** 歌单选择弹窗：一列歌单，点一个就落库并关掉。 */
+/**
+ * 「加入歌单」选择弹窗：一列歌单，点一个就落库并关掉（标题下带「新建歌单」入口）。
+ * 「加入歌单」选择弹窗（歌单行 + 对勾 + 新建入口）。
+ *
+ * 2026-11-17 深夜（续）用户指令「播放界面 三点菜单增加 加入歌单」——播放页顶栏那颗三点
+ * 也要能加歌单，所以这里从 `private` 放开，供 [com.msop.player.ui.player.PlayerSheet] 复用，
+ * 两边弹窗长得完全一样，不做第二套。
+ */
 @Composable
-private fun PlaylistPickerDialog(
+fun PlaylistPickerDialog(
     title: String,
     playlists: List<Pair<Long, String>>,
     excludeId: Long?,
@@ -833,8 +855,18 @@ fun ScreenTitle(
     }
 }
 
-/** 44dp 触摸目标的圆形图标按钮，全 App 统一的点击热区。 */
-@Composable
+/**
+ * 剩余时长文案（2026-11-18 用户指令「列表行右侧时长点击播放时变化」）。
+ *
+ * 开头的 `-` 是**设计**——表示「还剩」，不是负时长：数值已 `coerceAtLeast(0L)`，
+ * 起播显示 `-5:47`，播完正好落到 `-0:00`。排查「为什么显示负数」时别把它当 bug。
+ */
+private fun remainingLabel(remainingMs: Long): String {
+    val totalSeconds = (remainingMs.coerceAtLeast(0L) + 999L) / 1000L
+    return "-%d:%02d".format(totalSeconds / 60, totalSeconds % 60)
+}
+
+/** 44dp 触摸目标的圆形图标按钮，全 App 统一的点击热区。 */@Composable
 fun IconAction(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     contentDescription: String?,

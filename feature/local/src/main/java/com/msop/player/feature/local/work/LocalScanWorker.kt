@@ -6,12 +6,16 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.msop.player.core.common.log.AppLog
+import com.msop.player.core.database.dao.TrackDao
+import com.msop.player.core.database.mapper.toTrack
+import com.msop.player.core.model.TrackMerger
 import com.msop.player.feature.local.metadata.LocalMetadataEnricher
 import com.msop.player.feature.local.scan.LocalLibrarySyncer
 import com.msop.player.feature.local.scan.SystemMediaIndexer
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.first
 
 /**
  * 后台扫描 Worker。
@@ -25,6 +29,7 @@ class LocalScanWorker @AssistedInject constructor(
     @Assisted params: WorkerParameters,
     private val syncer: LocalLibrarySyncer,
     private val enricher: LocalMetadataEnricher,
+    private val trackDao: TrackDao,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
@@ -76,7 +81,9 @@ class LocalScanWorker @AssistedInject constructor(
             // 只有全量扫描会删曲目，也只有它可能留下没人引用的封面
             if (full) sweepOrphanCovers()
 
-            notifier.finished(stats, enriched)
+            // 同一个总数同时给通知栏和设置页，避免在 UI 线程重算全库
+            val total = libraryTotal()
+            notifier.finished(stats, enriched, total)
             AppLog.i("LocalScanWorker 完成 $stats 补齐=$enriched 音质=$quality 封面=$covers")
             Result.success(
                 workDataOf(
@@ -84,6 +91,7 @@ class LocalScanWorker @AssistedInject constructor(
                     KEY_WRITTEN to stats.written,
                     KEY_ELAPSED_MS to stats.elapsedMs,
                     KEY_ENRICHED to enriched,
+                    KEY_LIBRARY_TOTAL to total,
                 ),
             )
         } catch (cancellation: CancellationException) {
@@ -100,8 +108,15 @@ class LocalScanWorker @AssistedInject constructor(
         }
     }
 
-    private suspend fun enrichMetadata(): Int = try {
-        enricher.enrichMissing().enriched
+    /**
+     * 扫描结束后曲库总条数（本机 + 云端），与音乐库列表用同一套去重，数字才能对上「共 N 首」。
+     */
+    private suspend fun libraryTotal(): Int = runCatching {
+        val all = trackDao.observeAll().first().map { it.toTrack() }
+        TrackMerger.merge(all).size
+    }.getOrDefault(0)
+
+    private suspend fun enrichMetadata(): Int = try {        enricher.enrichMissing().enriched
     } catch (cancellation: CancellationException) {
         throw cancellation
     } catch (throwable: Throwable) {
@@ -134,6 +149,7 @@ class LocalScanWorker @AssistedInject constructor(
         const val KEY_WRITTEN: String = "written"
         const val KEY_ELAPSED_MS: String = "elapsedMs"
         const val KEY_ENRICHED: String = "enriched"
+        const val KEY_LIBRARY_TOTAL: String = "libraryTotal"
 
         private const val MAX_ATTEMPTS = 3
     }

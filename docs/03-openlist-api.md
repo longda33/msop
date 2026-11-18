@@ -580,3 +580,110 @@ token_{id} / _token_profile                 JWT 缓存按 profile 分开，切�
 - 参考：`cosmictaserdev-creator/Convx` 的通知就是 Media3 的 `DefaultMediaNotificationProvider`
   （无自定义布局），用户截图里的紧凑卡是旧版 SystemUI 模板，不是该项目写的。
 - 入口 Intent 全部走 `MediaController`（`Media3Session` 命令），因此卡片在锁屏上也能控制播放。
+
+---
+
+## 10. 2026-11-17 · OpenList 的 `/dav` 作为 WebDAV 音源：能同步、不能播放
+
+### 10.1 现象与实测根因
+
+用户反馈「OpenList 添加到 WebDAV 没法用」，确认失败环节是**播放**（设置里能同步，
+曲库有歌，点播放报 Source error）。用设备上保存的那条配置
+（`http://172.207.160.128:5244/dav`，rootPath `/cd18/Music`，admin）从宿主机逐项复现：
+
+| 请求 | 结果 |
+|---|---|
+| `PROPFIND /dav/cd18/Music/` + Basic，Depth 1 | `207`，XML 正常列出目录和文件 → 同步 182 首没问题 |
+| `GET /dav/cd18/Music/Bon Jovi/Its My Life Bon Jovi.flac` + Basic + `Range` | **`403`**，body 是 OpenList 的 XML error，`Accept-Ranges: bytes` |
+| 同一 GET 不带 Authorization | `401`，`WWW-Authenticate: Basic realm="openlist"` |
+| `POST /api/auth/login`（去掉 `/dav`） | `code=200`，拿到 JWT（请求头无 Bearer 前缀） |
+| `POST /api/fs/get {"path":"/cd18/Music/Bon Jovi/…flac"}` + JWT | `code=200`，返回 `raw_url` |
+| `GET raw_url` + `Range: bytes=0-1023`（不带任何 Authorization） | **`206`**，`Content-Range: bytes 0-1023/29648735`，开头是 `fLaC` |
+
+结论：**OpenList 的 WebDAV 端点只完整实现了列目录，文件 GET 不通**；之前 05-progress
+里记的「WebDAV 曲 GET 403/404、只有 PROPFIND 正常」就是同一件事，不是缓存或播放器的 bug。
+koyeb 那台是另一种表现（GET 302 跳 SharePoint 直链，带的 Basic/JWT 头会被目标站拒绝），
+同样不适合直接当播放地址。
+
+### 10.2 修法：列目录仍走 WebDAV，取播放地址改走原生 REST
+
+新增 `core/network/OpenListWebDavBridge.kt`，接在 `WebDavClient.resolve()` 前面：
+
+1. 只有当配置地址以 `/dav` 结尾（`ServerUrl` 规范化后用 `HttpUrl` 拆路径段，
+   反代子路径 `https://h/openlist/dav` → `https://h/openlist`）才尝试桥接；
+   `dav.2dland.cn` 这类主机名里带 dav、但路径不是 `/dav` 的服务完全不受影响。
+2. `POST /api/auth/login`（用户名密码用 WebDAV 配置里的同一套）拿 JWT，
+   按「base + 用户名 + 密码哈希」指纹缓存在内存，改密码自动失效。
+3. `POST /api/fs/get {"path": rootPath + webdav:/相对路径}` 拿 `raw_url`；
+   JWT 401/403 时清掉重登一次再试。失败 5 分钟内不再重试，避免普通 WebDAV
+   被反复探测；成功则清掉失败标记。
+4. `raw_url` 不入库、不进缓存 key（沿用 §8 的稳定 key 约束），每次起播/seek 现换。
+5. `WebDavClient.headers()` 看到桥接已拿到 session 就返回**空 map**——
+   实测给 raw_url 带 Authorization 会 401，和 §6.2 的 JWT 直链是同一条规律。
+   桥接没成功时照旧返回 Basic 头，回退普通 WebDAV URL。
+
+### 10.3 验证
+
+- JVM：`OpenListWebDavBridgeTest` 5 例（`/dav` base 化简、rootPath 前缀拼接、本地
+  `HttpServer` 假登录 + fs/get + session 状态、普通 WebDAV 不打原生 API、登录返回非 JSON 安全回退）；
+  全量 `test` debug + release 通过。
+- 模拟器（emulator-5554）：重装 debug 包 → 搜索 `Nivis` → 点播 WebDAV 曲
+  `慢慢（抖音热版） Nivis.`。日志出现 `WebDAV→OpenList 原生直链解析成功：
+  webdav:p1:/Nivis/…`；媒体会话先后记录 `PLAYING(3)/position=17886` 与
+  `STOPPED(1)/position=48886`（整首 48.886 s 自然播完），无 `ExoPlaybackException`
+  与 403。宿主机对同一 raw_url 的 Range 探测是 206，seek 所用链路与原生 OpenList 相同。
+
+---
+
+## 11. 2026-11-17 下午 · 云端曲目的内嵌封面（Range 探测 + 限并发）
+
+- 用户确认「内置封面不显示」指的是 **OpenList / WebDAV 云端曲**：同步只拿到文件名，
+  Subsonic 又只给 11 张（服务端索引不全），其余 73 首 OpenList + 182 首 WebDAV 全是占位图。
+- 新链路：`RemoteCoverProbe` 对播放直链发小范围 `Range` GET（头 512 KB，必要时按
+  ID3/FLAC 声明长度补一次，MP4 再取尾 512 KB），解析 ID3v2 APIC/PIC、FLAC PICTURE
+  块、MP4 `covr` 原子，拿到图片字节；`RemoteCoverExtractor` 用 `StreamUrlResolver`
+  取直链与请求头（OpenList raw_url 无头、WebDAV Basic），按 SHA-1 写进
+  `files/covers`（与本机封面同一目录，内容相同天然共用一份），回写 `tracks.coverUri`。
+- **请求约束**：并发上限 4（`Semaphore`），单次最多 300 首，失败曲目 24 小时内跳过，
+  不阻塞首屏（跑在 `LibraryViewModel` 已有的 IO 预热协程里）。4 个 JVM 用例覆盖三种格式解析。
+- 设备实测：候选 255 → 写入 183 张（OPENLIST 83/84、WEBDAV 111/182），耗时 180 s，
+  日志 `云端封面提取 候选=255 写入=183 无封面=72 耗时=180175ms 并发上限=4`。
+  写不出的 72 首确实是文件里没有内嵌图，保留占位图，不影响播放。
+
+---
+
+## 12. 2026-11-17 傍晚 · 云端歌词 / 白封面收尾
+
+### 12.1 云端内嵌歌词此前是零实现
+
+`LyricsRepository.readEmbedded()` 第一行就是 `if (track.source != LOCAL) return null`，
+文档里也写着「远程曲目的内嵌歌词等 P3 落地后再接」。这次补上：
+
+- 新增 `core/network/RemoteLyricsProbe`：Range 读头 512 KB（ID3/FLAC 按声明长度补一次，
+  MP4 取尾），解析 ID3v2 `USLT`（v2.2 `ULT`）、FLAC Vorbis Comment 的
+  `LYRICS` / `UNSYNCEDLYRICS`、MP4 `©lyr`；编码支持 ISO-8859-1 / UTF-16(BOM) / UTF-16BE / UTF-8。
+- `LyricsRepository` 注入 `StreamUrlResolver`，非 LOCAL 时先 `resolve()` 拿直链
+  （OpenList raw_url 无头，WebDAV 走 Basic 或 §10 的原生直链），再 `headers()`；
+  `feature:lyrics` 新增 `:core:network` 依赖。
+- 3 个 JVM 用例覆盖 ID3 USLT、FLAC Vorbis、无歌词。
+- **素材现状**：宿主机抽样 25 首云端文件（WebDAV `/cd18/Music`）读头 512 KB，
+  `USLT` / `LYRICS=` / `©lyr` 命中 **0**。所以「云端没歌词」目前主要是文件本身没有，
+  不是代码问题；以后放带歌词的文件即可显示。
+
+### 12.2 部分云端封面显示白色
+
+根因有两层：
+
+1. 旧逻辑只按 ID3/FLAC 的 picture type 取字节，不校验是不是图片；有些文件里
+   `APIC`/`PICTURE` 内容不是合法图片，照样写成 `.jpg`，Coil 解码失败 → 露出白色底。
+2. 解析出 PNG/WebP 也一律命名 `.jpg`，部分解码路径按扩展名选 decoder 时失败。
+
+修法：
+
+- `RemoteCoverProbe.imageExtension()` 按魔数只认 JPEG（`FF D8 FF`）、PNG（`89 50 4E 47`）、
+  WebP（`RIFF....WEBP`）；`picture()` 返回前校验，不合法继续尝试其它格式/返回 null。
+- `RemoteCoverExtractor.probeAndSave()` 按真实格式写 `<sha1>.jpg/.png/.webp`。
+- 启动时 `repairExistingCovers()` 自愈历史数据：魔数不合法 → 清空 `coverUri` 重抓；
+  扩展名不符 → 改名并回写 URI。
+- 设备实测日志：`云端封面自愈 清空无效引用=6`、`扩展名修正=29`；
+  DB 云端封面变为 `jpg 148 / png 28 / webp 2`，白块消失。

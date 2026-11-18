@@ -54,6 +54,14 @@ data class ServerConfig(
     /** 列表里显示的一行标题：优先用户填的名字，否则退到主机名。 */
     val displayName: String
         get() = name.ifBlank { hostOf(baseUrl) }.ifBlank { "OpenList 服务器" }
+
+    /**
+     * 音乐目录（2026-11-17 深夜用户需求「路径支持填写多条，一行一条」）。
+     *
+     * [rootPath] 允许换行写多个目录，见 [splitRootPaths]；一行都没写等于整个网盘根 `/`。
+     */
+    val rootPaths: List<String>
+        get() = splitRootPaths(rootPath, default = "/")
 }
 
 /** 从规范化后的地址里取主机名，只用于显示，失败时返回空串。 */

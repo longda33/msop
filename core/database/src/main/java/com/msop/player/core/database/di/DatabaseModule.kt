@@ -28,8 +28,11 @@ object DatabaseModule {
                 MsopDatabase.MIGRATION_3_4,
                 MsopDatabase.MIGRATION_4_5,
             )
-            // 兜底：万一未来漏写迁移，宁可重建也不能启动崩溃。
-            .fallbackToDestructiveMigration(dropAllTables = true)
+            // 2026-11-17 修复：删掉 `fallbackToDestructiveMigration`。
+            // 它会在「漏写迁移」时静默清库——用户 509 首本机曲、云端曲目、歌单、
+            // 收藏、播放计数全部消失，而界面只表现为「曲库空了」。宁可启动时
+            // 明确抛出 IllegalStateException（开发阶段立刻暴露），也不能静默删数据。
+            // v1→v5 五条迁移齐备；新增版本号时必须同步补一条 Migration。
             .build()
 
     @Provides

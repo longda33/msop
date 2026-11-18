@@ -1,7 +1,5 @@
-package com.msop.player.ui.library
+package com.msop.player.core.model
 
-import com.msop.player.core.model.SourceType
-import com.msop.player.core.model.Track
 
 /**
  * 曲库展示层去重（2026-11-16 晚用户需求「本地与云端同名合并，本地优先」，

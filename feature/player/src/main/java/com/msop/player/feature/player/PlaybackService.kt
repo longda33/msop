@@ -71,10 +71,35 @@ class PlaybackService : MediaSessionService() {
         setMediaNotificationProvider(notificationProvider)
     }
 
-    private companion object {
+    companion object {
         /** 每次换 id 才能改通知的渠道设置；MediaStyle 由系统渲染成大卡 + 传输键。 */
-        const val CHANNEL_ID = "msop_playback_v3"
-        const val NOTIFICATION_ID = 1001
+        private const val CHANNEL_ID = "msop_playback_v3"
+        private const val NOTIFICATION_ID = 1001
+
+        /** UI 侧「完全关闭软件」时发给服务的一次性指令（见 [onStartCommand]）。 */
+        const val ACTION_SHUTDOWN = "com.msop.player.action.SHUTDOWN"
+    }
+
+    /**
+     * 2026-11-17 深夜（五）用户指令：「关闭软件要完全关闭，不要后台继续」。
+     *
+     * `stopService()` 对 Media3 的 `MediaSessionService` 不够——它被控制器绑着、
+     * 又是前台服务，会被系统拉回来（实测 Activity 退出后服务与通知仍在）。
+     * 所以改由 UI 显式发一条 [ACTION_SHUTDOWN]：先 `stop()` + `clearMediaItems()`
+     * （让会话与通知一起收掉），再摘前台通知、`stopSelf()`。
+     */
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_SHUTDOWN) {
+            AppLog.i("PlaybackService 收到关闭指令，停播并退出")
+            mediaSession?.player?.run {
+                stop()
+                clearMediaItems()
+            }
+            runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        return super.onStartCommand(intent, flags, startId)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? =

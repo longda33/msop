@@ -42,13 +42,21 @@ class MediaCachePolicyTest {
     }
 
     @Test
-    fun `缓存 key 只由稳定内部 URI 决定，与一次性签名无关`() {
+    fun `缓存 key 完整保留内部 URI，文件名中的问号井号不会串曲`() {
         val plain = "openlist:/music/Butter-Fly.flac"
-        val signedA = "$plain?tempauth=v1.aaa"
-        val signedB = "$plain?tempauth=v1.bbb#frag"
-
-        assertEquals(CacheDecision.stableKey(plain), CacheDecision.stableKey(signedA))
-        assertEquals(CacheDecision.stableKey(signedA), CacheDecision.stableKey(signedB))
+        assertEquals("msop:media:$plain", CacheDecision.stableKey(plain))
+        assertNotEquals(
+            CacheDecision.stableKey("openlist:/music/A?1.flac"),
+            CacheDecision.stableKey("openlist:/music/A#1.flac"),
+        )
+        assertNotEquals(
+            CacheDecision.stableKey("openlist:/music/A?1.flac"),
+            CacheDecision.stableKey("openlist:/music/A.flac"),
+        )
+        assertNotEquals(
+            CacheDecision.stableKey("webdav:/music/A#1.flac"),
+            CacheDecision.stableKey("webdav:/music/A.flac"),
+        )
         assertNotEquals(
             CacheDecision.stableKey("openlist:/music/a.flac"),
             CacheDecision.stableKey("openlist:/music/b.flac"),

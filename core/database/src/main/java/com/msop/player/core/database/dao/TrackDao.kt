@@ -96,6 +96,20 @@ interface TrackDao {
     @Query("SELECT coverUri FROM tracks WHERE source = :source AND coverUri IS NOT NULL")
     suspend fun coverUris(source: SourceType): List<String>
 
+    /**
+     * **全部来源**的非空封面引用（2026-11-18）。
+     *
+     * 本机与云端封面走的是同一个 `files/covers` 目录（按内容哈希命名，同专辑天然复用），
+     * 所以清理孤立文件时只查 LOCAL 会把只被云端曲目引用的文件误删——一次全量扫描
+     * 之后云端封面就整片空掉，要等下次冷启动重新探测才回来。
+     */
+    @Query("SELECT coverUri FROM tracks WHERE coverUri IS NOT NULL")
+    suspend fun coverUrisAll(): List<String>
+
+    /** 清空某来源的全部封面引用（清缓存后重建用），返回受影响行数。 */
+    @Query("UPDATE tracks SET coverUri = NULL WHERE source = :source AND coverUri IS NOT NULL")
+    suspend fun clearAllCovers(source: SourceType): Int
+
     /** 已经有 `coverUri` 的曲目（封面自愈用：URI 存在但文件被删掉时重新提取）。 */
     @Query(
         "SELECT * FROM tracks WHERE source = :source AND coverUri IS NOT NULL " +

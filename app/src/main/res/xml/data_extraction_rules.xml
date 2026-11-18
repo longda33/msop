@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    2026-11-17 新增：把凭据从系统备份/换机迁移里排除。
+    msop_openlist / msop_webdav 两个 SharedPreferences 存的是明文密码与媒体密钥，
+    落在云备份里等于把服务器凭据交给第三方存储。allowBackup 已设为 false，
+    这里再做一层显式排除，防止将来误把 allowBackup 改回 true 时又泄漏。
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="msop_openlist.xml" />
+        <exclude domain="sharedpref" path="msop_webdav.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="msop_openlist.xml" />
+        <exclude domain="sharedpref" path="msop_webdav.xml" />
+    </device-transfer>
+</data-extraction-rules>

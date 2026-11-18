@@ -2096,3 +2096,388 @@ svc wifi enable
 - 关 Wi-Fi / 飞行模式 / 关移动数据都会掉 MuMu 的 adb（累计 4 次，其中 2 次靠用户手动恢复）；断网类验证只能用设备端 `nohup` 脚本自取证。
 - `cmd wifi add-network` 之后 `logcat -d -s Msop:V` 曾出现空结果（logd 缓冲被刷），要看历史行就在脚本里 `logcat -d > /sdcard/x.log` 再拉。
 - 备份/恢复相关坐标：设置页滚两次后 导出备份 y≈612、导入备份 y≈748；SAF 选择器里 zip 行 y≈658（`bad.zip` y≈528）；歌单行 ⋮ x≈700（MoveTest y≈600 / BatchTest y≈770），菜单「删除」y≈954，确认框「删除」(663,897)；导出/导入成功弹窗「知道了」(640,895) / (640,916)；缓存清理确认「清理」(657,912)。
+
+---
+
+## 2026-11-17 · OpenList `/dav` 当 WebDAV 音源：修好「能同步、放不了」
+
+- 用户指令：「读取doc md文件了解项目；openlist添加到webdav没法用」。先读完 `INDEX.md` /
+  `USAGE.md` / `02` / `03` / 代码审查报告，再让用户选失败环节，确认是「**能同步但播放失败**」
+  且音源是「**App 设置里填 OpenList 的 `/dav` 地址**」，不是 OpenList 后台加存储驱动。
+- 从设备 `shared_prefs/msop_webdav.xml` 读到启用项 p1：`http://172.207.160.128:5244/dav`、
+  root `/cd18/Music`、admin、182 首（**凭据仅本机诊断用，未写进仓库**）。宿主机用
+  Python urllib 复现：`PROPFIND` 207；同一 flac 的 `GET` 带 Basic + Range → **403 XML**，
+  不带 Basic → 401；`POST /api/auth/login`（剥掉 `/dav`）→ 200 JWT；
+  `POST /api/fs/get {"path":"/cd18/Music/…"}` → 200 `raw_url`；
+  `GET raw_url` + `Range: bytes=0-1023` → **206**，头 4 字节 `fLaC`。
+  这就是旧记录里「WEBDAV 时长 53/182、GET 403/404、只有 PROPFIND 正常」的同一个根因，
+  不是缓存 bug；koyeb 那台 GET 302 跳 SharePoint 同理不适合直接播。
+- 代码改动：新增 `core/network/OpenListWebDavBridge.kt`；`WebDavClient` 注入并在 `resolve()`
+  前置尝试、`headers()` 在桥接 session 存在时返回空 map。纯函数 `restBaseFor()` 用
+  `HttpUrl` 拆段剥 `/dav`（反代子路径保留），不用字符串拼 URL；登录 JWT 请求头无 Bearer；
+  `rootPath` + `webdav:/相对路径` 才是 OpenList 路径；401/403 重登一次；失败 5 分钟退避；
+  普通 WebDAV（`dav.2dland.cn`）路径不是 `/dav`，零影响。
+- 踩坑：新增的 JVM 单测一开始失败，原因是本地 `android.util.Log` 未 mock，
+  `AppLog.d()` 抛 `RuntimeException`；把日志移到不被单测直接调用的 `WebDavClient.resolve()`，
+  桥接类保持纯 Kotlin/OKHttp，5 例测试全过（含非 JSON 登录响应安全回退）。
+- 验证：`:app:assembleDebug test` 595 tasks BUILD SUCCESSFUL（debug+release 全绿）；
+  APK 21,143,938 B 装机，搜索 `Nivis` 点播 WebDAV 曲 `慢慢（抖音热版） Nivis.`，
+  logcat 有 `远程缓存未命中，解析播放地址 uri=webdav:p1:/Nivis/…` 与
+  `WebDAV→OpenList 原生直链解析成功`，无 403/Source error；`dumpsys media_session`
+  记录 `PLAYING(3)/position=17886` 与随后 `STOPPED(1)/position=48886`，即整首播完。
+- 遗留：raw_url 的 seek 未单独在 UI 上打点（Range 206 已在宿主机同一 URL 上验证，
+  且播放链与原生 OpenList 完全复用）；koyeb WebDAV 设备侧仍解析到 `[::1]` 不可达。
+  状态同步三处：`TASKS.md` P7-07 备注 + 变更记录、`AGENTS.md` §0.6、本条。
+
+---
+
+## 2026-11-17 下午 · 三项反馈：云端内嵌封面 / 玻璃透明度 / 菜单文案
+
+- 用户先问「一大堆歌曲内置封面不显示，注意请求（限制并发请求）」，用选项确认是
+  **云端歌曲（OpenList/WebDAV）**，不是本机（本机 19 首里 17 首已有封面，剩 2 首确实无内嵌图）。
+- 新增 `core/network/RemoteCoverProbe.kt`：Range 头 512KB（ID3/FLAC 按声明长度补一次，
+  MP4 取尾）解析 ID3v2 APIC/PIC、FLAC PICTURE、MP4 covr；纯 JVM 可测，4 例构造字节用例全过。
+  新增 `feature/remote/RemoteCoverExtractor.kt`：用 `StreamUrlResolver` 拿直链/头，写
+  `files/covers/<sha1>.jpg`（与本机共用目录与命名），回写 tracks.coverUri；
+  **Semaphore(4)** 并发上限（用户明确要求限制并发）、单次 300 首、失败 24h 跳过。
+  接在 `LibraryViewModel` 已有的 600ms 后 IO 预热协程里，不挡首屏。
+- 设备实测（emulator-5554，装新 debug 包重启）：日志
+  `云端封面提取 候选=255 写入=183 无封面=72 耗时=180175ms 并发上限=4`；
+  DB 云端有封面数 OPENLIST 11→83、WEBDAV 0→111。72 首无内嵌图，保留占位。
+  踩坑：单测里 `add(0x86)` 编译报 Int 不能当 Byte，改 `0x86.toByte()`；
+  FLAC PICTURE 块结束位置应是 `8 + block.size`（4 字节 fLaC + 4 字节块头）。
+- 玻璃透明度：用户第二次反馈「导航栏 迷你条（包括横屏歌词迷你控制条）窗口背景透明度太高」，
+  三处垫色由浅 0.72 / 深 0.74 → **浅 0.90 / 深 0.92**（`ShuYinNavBar.kt`、`MiniPlayer.kt`、
+  `LyricsScreen.kt` 的 `LyricsGlassControls`），此前的 0.55/0.60 更透明，不要再回退。
+- 三点菜单：`TrackRow.kt` 的「从歌单移除」文案改「移除歌单」；**行为不变**（仍是移除当前
+  歌单里的这一首），删除整个歌单仍在歌单页的「删除歌单」。
+- 验证：`:app:assembleDebug test` BUILD SUCCESSFUL（debug + release 全绿）。
+  文档同步：`AGENTS.md` §0.7、`TASKS.md` 变更记录、`03-openlist-api.md` §11、本条。
+
+---
+
+## 2026-11-17 傍晚 · 六项反馈（歌单按钮 / 收藏置顶 / 云端歌词 / 迷你条 / 白封面 / 通知标签）
+
+1. **歌单播放键浅色隐形**：`PlaylistScreen` 原按钮是 `background(Color.White)` +
+   `tint = Palette.Ink`，而浅色主题的 `Ink = 0xFFF4F2FB`（近白）→ 白底白字。
+   改固定 `Palette.Blue` 底 + `Color.White` 图标。
+2. **播放/随机点击无变化**：`PlaylistDetail` 增加 `playMode` / `onToggle` /
+   `onSetPlayMode`，`LibraryScreen` 从 `playback` 与 `vm` 传入。播放键按
+   `playingThisList = isPlaying && currentTrackId in tracks` 在 Play/Pause 间切换；
+   随机键按真实 `PlayMode.SHUFFLE` 高亮，点击切模式并用新顺序起播。
+   设备实测：点播放 → desc「暂停」；再点 → 「播放全部」；随机 → 「关闭随机播放」→「随机播放」。
+3. **收藏条目置顶**：Compose foundation 1.12 没有 `stickyHeader`（导入直接 unresolved），
+   改为把标题 + `FavoritesRow` 放在 `LazyColumn` 外固定，列表 `weight(1f)` 滚动；
+   副标题「置顶 · 播放页点爱心即收藏」→「收藏」。
+4. **云端内嵌歌词**：查明 `readEmbedded()` 对非 LOCAL 直接 return null（零实现）。
+   新增 `RemoteLyricsProbe`（ID3 USLT / FLAC Vorbis LYRICS / MP4 ©lyr），
+   `LyricsRepository` 注入 `StreamUrlResolver`，`feature:lyrics` 依赖 `:core:network`；
+   3 个 JVM 用例。宿主机抽样 25 首云端文件读头，**0 个歌词标签**——代码通了，素材没有。
+5. **迷你条反馈**：`MsopApp` 的 `statusText` 在 `isBuffering && source != LOCAL` 时显示
+   「正在连接云端，缓冲中…」；断网提示优先，本地曲不闪。
+6. **白封面**：`RemoteCoverProbe` 增加 `imageExtension()` 魔数校验（JPEG/PNG/WebP），
+   `picture()` 不合法不返回；`RemoteCoverExtractor` 按真实格式写扩展名，并在启动时
+   `repairExistingCovers()` 自愈。设备实测：清空无效 6、改名 29，DB 变
+   `jpg 148 / png 28 / webp 2`，白块消失。
+7. **通知栏「这部手机」**：截图确认是 SystemUI 对带 MediaSession 的媒体通知画的输出
+   切换器标签，官方没有只隐藏它的 API；用户选择「先不动，之后再说」。要删只能改回
+   不带 MediaSession 的自绘普通通知（会失去系统媒体区与进度条）。
+- 构建：`:app:assembleDebug test` BUILD SUCCESSFUL（debug + release 全绿，595 tasks）。
+  文档同步：`AGENTS.md` §0.8、`TASKS.md`、`03-openlist-api.md` §12、本条。
+
+---
+
+## 2026-11-17 · 文档状态同步（零代码改动）
+
+- 用户指令「先把文档状态同步到最新」。三份文档的状态停在 2026-11-16，与 11-17 下午 / 傍晚的实现
+  不一致；最要紧的是 P5-01 备注还写着「远程分支完全没实现」，而实际 11-17 傍晚已经补了云端内嵌歌词。
+- 先按代码核实再改字：`LyricsRepository.readEmbedded()` 当前对非 LOCAL 的分支是
+  `StreamUrlResolver.resolve()` + `RemoteLyricsProbe.lyrics()`（读 ID3 `USLT` / FLAC `LYRICS` /
+  MP4 `©lyr`），的确不再是 `return null`；`MsopApp.kt:271` 的「正在连接云端，缓冲中…」、
+  `PlayerSheet.kt:695/696` 的「网络较慢，仍在缓冲…」/「缓冲中…」都在，前者无实测、后者无低速网络截图。
+- 状态口径（勾选一个未改）：50 项 **44 完成 / 6 未完结**（`[~]` P1-04、P5-01、P7-03；
+  `[ ]` P5-04、P6-01；`[!]` P7-12）。总览表 P1 改 8 完成 / 1 部分、P3 改 7 完成、P4 改 5 完成、
+  P7 改 10 完成 / 1 待验证 / 1 阻塞，总行补「44 完成 / 6 未完结（可做 2 · 等外部条件 3 · 阻塞 1）」。
+- P5-01 备注拆成「云端内嵌（已实现、缺素材）」与「云端旁挂 `.lrc`（未实现、服务器无素材）」两条，
+  并把旧的「完全没实现」结论按当前代码改写（2026-11-16 当时确实如此，不能当作现在的结论用）。
+- 改动文件：`TASKS.md`（总览 5 行、P5-01、P7-03、变更记录追加）、`INDEX.md`（§0 两句话、§3 歌词入口、
+  §4 快照整段改写）、`AGENTS.md`（§1 第 3 条、§2 阶段 / 下一步 / 最后更新、新增 §0.9）、本文件本条。
+- 未跑构建与测试：本轮无源码改动。
+
+---
+
+## 2026-11-17 · 代码审查修复（18 文件，27 例新增无，277 例全绿）
+
+- 用户指令「审查项目代码，修复发现问题」。以 `CODE-REVIEW-2026-11-16.md` 的 21 项为基线，
+  **逐项回读当前代码**确认是否仍成立，只修仍然成立的，另补 4 处审查时新发现的问题。
+  详细清单见 `CODE-FIXES-2026-11-17.md`。
+- 高危四条（这条最值得记）：
+  1. `DatabaseModule` 的 `fallbackToDestructiveMigration` 删掉——漏迁移会静默清库；
+  2. `AndroidManifest` `allowBackup=false` + 新增 `data_extraction_rules.xml`——两个 prefs
+     存的是明文密码/媒体密钥，不能进云备份；
+  3. `RemoteLibrarySyncer` 补 `canClean`——原来只要扫到一首就按差集删，一次 500 或分页用尽
+     会删掉半个云端曲库（WebDAV 那条早有保护，OpenList 这条漏了）；
+  4. `RemoteDurationProbe` 改流式限量读——原来 `body.bytes()` 在服务器忽略 Range 时把整首
+     无损读进堆，4 路并发直接 OOM（OOM 是 Error，`catch (Exception)` 兜不住）。
+- 功能错误五条：断网保护起播竞态（`currentMediaItem` 异步为 null）、快照抑制标志不复位
+  （`try/finally`）、播放中切歌快照延迟 5 秒、SAF 旁挂歌词 documentId 用 `:` 拼错
+  （应为 `/`，MediaStore 曲目因此一直读不到 `.lrc`）、歌词 ViewModel 旧任务覆盖 + `reload` 失效
+  （`loadJob` + `loadToken`）。
+- 其余：备份导入改单事务（app 模块显式加 `room-ktx`）、备份 zip 加条目/总字节上限、
+  两处配置 Store 全写方法 `@Synchronized`、批量删库分片（`TrackDaoChunks.kt`，400/片）、
+  Subsonic 与 WebDAV 补明文 HTTP 闸门、缓存策略去掉非局部返回、WAV/MP4 探测越界与死循环。
+- 验证：`java -classpath gradle\wrapper\gradle-wrapper.jar org.gradle.wrapper.GradleWrapperMain
+  :app:assembleDebug test` → BUILD SUCCESSFUL，`test` 277 例 0 失败 0 跳过（debug + release）。
+- **未做真机/模拟器手测**：断网起播、SAF 歌词、备份回滚、漏迁移四项需要构造特定环境，
+  验法已写进 `CODE-FIXES-2026-11-17.md` §五。
+
+## 2026-11-17 晚 · 液态玻璃垫色回滚（用户报「iOS 液态玻璃效果丢失」）
+
+- 用户诉求：「历史修改导航栏、迷你条窗口透明度，造成 iOS 液态玻璃显示效果丢失」，
+  指定参考仓库 `https://github.com/power690/ShuYin`。
+- 定位（代码层）：`drawBackdrop` 的 `onDrawSurface` 把垫色整块画在 `vibrancy/blur/lens`
+  之上，白天为了「背景别太透」把三处垫色提到浅 `FAFAFA 0.90` / 深 `121212 0.92`，
+  折射与背景透光被完全盖住，视觉上等价于关掉液态玻璃。
+- 上游核对（本轮实抓，非凭记忆）：raw 拉 `ui/LiquidGlass.kt` 与 `ui/MiniPlayerBar.kt`
+  （包名 `com.xiaowei.player`），两处垫色都是**浅 0.55 / 深 0.60**；迷你条效果链为
+  `vibrancy() → blur(8dp 全效 / 14dp) → lens(24dp, depthEffect + chromaticAberration)`，
+  外加 `Highlight(width=1dp)` / `Shadow(20dp, .8)` / `InnerShadow(10dp, offset 5dp, .55)`。
+  可读性靠 `vibrancy()` 与字色 `isLightTheme ? Black : White`，不靠垫色。
+- 改动三处（同一块玻璃，必须同源）：`ShuYinNavBar.containerColor`、
+  `MiniPlayer.surfaceColor`、`LyricsScreen.LyricsGlassControls.glassFill`，全部回到 0.55 / 0.60，
+  三处 KDoc 同步改写，记录「0.90/0.92 为什么不能再出现」。
+- 验证：`:app:assembleDebug` BUILD SUCCESSFUL（1m29s）；`test` 277 例 0 失败 0 跳过；
+  装 `emulator-5554` 截图确认迷你条与导航条重新透出后方封面/列表，模糊、1dp 高光描边、
+  投影都在。深色 0.60 仅换常量（字色纯白），未单独截图。
+
+### 同日续修 · 垫色回滚后仍「透而不糊」：backdrop 录制子树缺不透明底
+
+- 用户拿两个项目的同位置截图对比（`ShuYin.PNG` / `msop.PNG`）：ShuYin 玻璃后是**重度磨砂的
+  列表**（行、封面全糊成色块），msop 玻璃后是**清晰可读的列表**，只是被一层白纱洗淡。
+- 抓图放大比对后确认这不是垫色问题，而是 **`blur` 没作用在东西上**：把 msop 截图裁切放大，
+  玻璃区里的列表文字笔画完整，无任何径向模糊。
+- 定位到根因（代码层）：`MsopApp.kt` 里 `AmbientBackground()` 是 `.layerBackdrop(layerBackdrop)`
+  节点的**兄弟**，因此录制进 GraphicsLayer 的只有「透明底 + NavHost 里的列表文字」。而
+  `vibrancy()/blur()/lens()` 全部作用于这张**透明图**，模糊一堆透明像素等于没有；0.55 垫色
+  下面透出来的其实是**屏幕上的真实列表**（所以字是清晰的）。
+- 对齐上游结构（`XMusicApp.kt`：`layerBackdrop(contentBackdrop)` 的子树自带不透明页面底）：
+  1. 删掉根 `Box` 里的 `AmbientBackground()`；
+  2. 把 `AmbientBackground()` 放进 `.layerBackdrop()` 子树，作为第一个子节点；
+  3. `statusBarsPadding()` 从录制节点移到 `NavHost` 的内层 Box——录制层要覆盖整屏（含状态栏），
+     NavHost 仍然从状态栏下开始。
+- 验证：`:app:assembleDebug` 绿（1m45s）；`test` 277 例 0 失败；装 `emulator-5554` 后
+  「彭佳慧」「金海心」整行糊成色块，迷你条/导航条呈现真正的磨砂玻璃，与 ShuYin 参考图同观感。
+- 教训（别改回去）：**玻璃要「糊」，backdrop 子树必须有东西可糊**——页面底色必须画在
+  `.layerBackdrop()` 里面；玻璃组件自己是兄弟节点，别再塞回录制子树。
+
+### 同日再调 · 高光强度（用户「高光强度 继续」）
+
+- 上游用的是 `Highlight.Default.copy(width = 1.dp)`：按 `HighlightModifier.configurePaint`
+  实际是 `ceil(1dp)*2` 宽描边 + `blurRadius 0.25dp` + `White 0.5`，浅色列表上边沿几乎不可见。
+- 新增共享常量 `GlassRimHighlight`（`components/ShuYinNavBar.kt`）：**2dp 边 / 1dp 柔化 /
+  `HighlightStyle.Default(color = White 0.62)`**。
+  - 导航条主行补上静态高光（上游原本没有），与迷你条同一条硬边；
+  - 迷你条改用共享常量（原 1dp）；
+  - 横屏歌词迷你卡描边 1dp → 1.5dp，`White 0.42→0.12` → `0.55→0.16`。
+- 注：`HighlightStyle.Default.copy(...)` 在 Kotlin 里会解析到嵌套类，编译报
+  `Unresolved reference 'copy'`，要写成构造调用 `HighlightStyle.Default(color = …)`。
+- 验证：`:app:assembleDebug` 绿；`test` 277 例 0 失败；模拟器截图边沿出现一圈上亮下淡的
+  镜面高光，与 ShuYin 参考图的「硬亮的玻璃边」一致。
+
+### 同日回滚 · 高光增强（用户「回滚，效果难看」）
+
+- 用户看过实物后否掉上一节的 2dp 高光：边沿变成一圈**描边感亮线**，不是 iOS 玻璃。
+- 全部退回原参数，净结果 = 本轮只有「垫色 0.55/0.60」+「backdrop 子树含 AmbientBackground」
+  两项保留：
+  - 删除共享常量 `GlassRimHighlight` 与 `HighlightStyle` import；
+  - 导航条主行重新**不挂**静态高光（与上游 `LiquidGlass.kt` 一致）；
+  - 迷你条回 `Highlight.Default.copy(width = 1.dp)`；
+  - 横屏歌词卡回 1dp / `White 0.42→0.12`。
+- 验证：`:app:assembleDebug` 绿（1m33s）；模拟器截图边沿恢复细淡高光，磨砂仍然生效。
+- 结论记进 `AGENTS.md` §0.11：**别再把高光往"更亮更粗"调**，要调先拿实物截图确认。
+
+
+## 2026-11-17 深夜 · 五项功能缺陷修复（筛选反馈 / 文件夹聚合 / 拖动 / 倒计时 / 下载路径）
+
+用户一条消息列出 5 项，逐条定位→改→装包实测：
+
+1. **音乐库右上角漏斗（用户称「沙漏」）只有歌曲类目生效**：实测三档筛选在歌手 / 专辑 /
+   文件夹上**确实生效**（从「只看本机」切到「只看云端」，歌手列表整批换成云端歌手），
+   排查结论是「没有可见反馈」——只有歌曲列表头会改标题。修法：`TabRow` 下方新增
+   `SourceFilterBanner`（`只看本机 · 18 首 ✕` + 「点一下恢复全部来源」），筛选非「全部来源」时出现。
+   歌单 Tab 是用户自建集合，不参与来源过滤，只靠这条提示。
+2. **文件夹路径太多**：两处根因一起改。
+   - 云端 `folderOf` 用 `rootPath.isNullOrBlank()` 判定，配置里留空（=整个盘）被当成「没配置」，
+     回退按 uri 子目录拆（OpenList 被拆成 `/music/db/歌手` 几十条）→ 改 `cloudRoots.containsKey(key)`，
+     留空归一到 `/`。
+   - 本机按 `localPath` 上级目录切 → 新增 `SafDirectoryStore.rootPaths()` / `treeUriRootPath()`，
+     `LibraryViewModel.localRoots`（Hilt 注入 `SafDirectoryStore`）把设置页「添加音乐目录」的
+     treeUri 还原成绝对路径，曲目按「归属哪个已授权目录」聚合；配不上的用 `topBucketOf` 只取卷下一级。
+   实测文件夹 Tab 收敛成 4 条：内部存储 18 首 / 根目录 24 首 / `/yd/musicweb` 42 首 / WebDAV `/cd18/Music` 181 首。
+3. **浅色模式拖动按钮看不见、拖不动**（队列 + 歌单同步）：
+   - 颜色：`QueueSheet` 手柄写死 `Color(0x55FFFFFF)`，`ReorderHandle` 用 `TextTertiary 50%`；改主题感知
+     深色白 45% / 浅色墨 42%，按住亮 `Palette.BlueLight`。
+   - 手势：两处 `detectDragGesturesAfterLongPress` → `detectDragGestures`（按下即拖）+ `change.consume()`；
+     手柄 28/30dp → 36/34dp。
+   - 实测：队列拖第一首手柄 3 行，Butter-Fly 从 01 变 03；歌单拖 MoveTest 一行，与 BatchTest 换位并落库。
+4. **播放页定时增加倒计时**：dock 定时按钮原来只显示「N分」，改 `sleepCountdownLabel()` 每秒刷新
+   `mm:ss`（≥1 小时 `h:mm:ss`，向上取整）；实测开 5 分钟后显示 `04:57` 并在对话框上方同步「还剩 4 分钟后暂停」。
+5. **设置界面下载路径下方提示词**：`SettingsViewModel.downloadPathLabel()` 改拼真实路径，
+   实测显示 `内部存储/Android/data/com.msop.player/files/Music`；选了 SAF 目录则解析成 `内部存储/Music`。
+
+验证：`:app:assembleDebug` SUCCESSFUL（1m22s）；`test` **277 例 0 失败 0 跳过**（36 个 TEST-*.xml）；
+模拟器 `emulator-5554`（Android 15 / 900×1600 / 浅色主题）逐项截图确认。
+改动文件：`LibraryScreen.kt`、`LibraryViewModel.kt`、`QueueSheet.kt`、`Reorder.kt`、`PlayerSheet.kt`、
+`SettingsViewModel.kt`、`SafPaths.kt`（+ 文档三件）。
+## 2026-11-17 深夜（续）· 五项收尾修正（验收反馈逐条回改）
+
+上一批（见上一节）装包后逐条验收，4 项被判改过头或方向错，本轮按反馈重做：
+
+1. **筛选状态条只留两个字**：`SourceFilterBanner` 收成无参（`filter: SourceFilter`），只渲一行
+   `Text`——本机 / 云端，`ALL` 直接 return。首数「· 18 首」、`✕`、「点一下恢复全部来源」全删，
+   也不再可点（换筛选走右上角漏斗）。实测筛选「只看本机」后条上只剩蓝色「本机」二字。
+2. **文件夹两处标题**：`folderLabel(key, cloudNames)` 改成「本机副标题一律真路径、云端标题用配置名」。
+   - 本机：标题仍按目录末段（卷根显示「内部存储」），**副标题 `本机 · /storage/emulated/0`**，不再美化。
+   - 云端：标题取 `cloudNames[key]`（设置界面里填的名称），取不到才回退目录末段/「根目录」。
+   - **踩坑**：`cloudNames` 初版键是 `"tag:${profile.id}"`（`openlist:p2`），而文件夹 key 是
+     `tag + ":" + 归一化rootPath`（`openlist:/yd/musicweb`），永不命中，标题一直是「根目录 / musicweb / Music」。
+     现在 VM 内 `cloudNamesSnapshot()` 用 `tag + normalizeCloudRootPath(rootPath)`，与
+     `LibraryScreen.normalizeCloudRoot()` 同口径。
+   - 实测（重装后截图）：内部存储 18（副标题 `本机 · /storage/emulated/0`）／`172.207.160.128:5244` 24／
+     `lan` 42／`lan-dav` 181，四条标题全对。
+3. **拖动回滚成「长按抓取」**：用户原话「一个手指按住拖动按钮，另一个手指可以滑动列表」。
+   `Reorder.kt` 回 `detectDragGesturesAfterLongPress`，手柄 28dp / icon 17dp；`QueueSheet.kt` 同步回
+   long-press、手柄 30dp、提示词「长按右侧手柄拖动排序」。**颜色修复（深色白 45% / 浅色墨 42% / 按住亮紫）
+   保留**——那是上一批「看不见」的独立缺陷，且尺寸不再上调。
+4. **悬浮歌词（桌面歌词）开关**：`LyricsScreen` 新增 `FloatingLyricsButton()` + 三态点击逻辑
+   （关闭 / 开启 / 跳系统 `ACTION_MANAGE_OVERLAY_PERMISSION`），复用 `DesktopLyricsService`。
+   - 第一版塞进 `LyricsToolsRow`（竖屏 + 横屏都出现在第 4 颗），用户判「位置不对」。
+   - 抓 ShuYin raw 源码核对：`ui/screens/PlayerScreen.kt` 的 `Icons.Filled.Lyrics` 位于歌词页顶部信息行
+     （封面 → 歌名/歌手 → 收藏 → 悬浮歌词 → 收起，`song.hasLyrics` 时才出现）。据此把按钮移到竖屏
+     `LyricsTrackHeader` 行尾，改成 34dp 裸图标（无边框无底色，19dp，enabled 亮紫 / 否则次级灰），
+     `LyricsToolButton` 的 `active` 形参撤掉，**横屏不加**。
+   - 实测：竖屏歌词页信息行最右出现该图标；点一次跳系统悬浮窗授权页（焦点变成
+     `com.android.settings`），`appops set … SYSTEM_ALERT_WINDOW allow` 后再点 →
+     `shared_prefs/msop_desktop_lyrics.xml` 的 `enabled=true`、`DesktopLyricsService` 起来、屏幕底部出现歌词条、
+     图标变亮紫；转横屏截图确认工具条只有三颗钮、没有这颗。
+5. **设置界面提示词**：`SettingsScreen` OpenList / WebDAV 两行副标题删掉「· 点此管理」，
+   实测显示「3 台已保存 · 1 台启用中 · 60 首远程歌曲」「3 台已保存 · 1 台启用中 · 182 首 WebDAV 歌曲」。
+
+验证：`:app:assembleDebug` SUCCESSFUL（1m22s–1m37s，共 3 次）；`test` **277 例 0 失败 0 跳过**（36 个 TEST-*.xml）；
+模拟器 `emulator-5554`（Android 15 / 900×1600 / 浅色主题）逐项截图。
+改动文件：`LibraryScreen.kt`、`LibraryViewModel.kt`、`Reorder.kt`、`QueueSheet.kt`、`LyricsScreen.kt`、
+`SettingsScreen.kt` + 文档三件（`SafPaths.kt` 为上一批新增，本轮未再改）。
+## 2026-11-17 深夜（三）· 悬浮歌词图标换 Material Lyrics + 播放页三点菜单「加入歌单」
+
+1. **图标**：用户「歌词悬浮按钮图标改成和ShuYin一样」。ShuYin 用的是 `Icons.Filled.Lyrics`（extended 包，8MB）。
+   我们手抄官方 pathData 进 `ui/icons/PlayerIcons.kt` 的 `Lyrics`：气泡 + 三行歌词 + 右上角音符，实心；
+   **`PathFillType.EvenOdd` 必须显式指定**，否则同色 NonZero 填充把三行盖死、看不出是歌词。
+   注：`PlayerIcons.Lyrics` 是共享图标（播放页 dock、设置页、歌词页信息行都用它），本轮整体换形态。
+2. **加入歌单**：`PlayerSheet` 新增 `playlistViewModel: PlaylistViewModel = hiltViewModel()`，竖屏分支
+   collect `playlists` / `memberships`，传给 `PlayerTopBar`；菜单顺序变为「歌曲信息 → 加入歌单 → 下载歌曲」。
+   已加过显示「已加歌单」+ 对勾 + 亮紫（与曲库行一致），点开仍可选其它歌单；弹窗复用 `PlaylistPickerDialog`
+   （本轮把它从 `private` 放开）。编译中途缺 `Icons.Filled.Check` import 失败一次，已补。
+
+实测：播放页三点 →「加入歌单」→ 选 MoveTest → 重开菜单变「已加歌单」（确实落库）；播放页 dock 与
+歌词页信息行的图标均为气泡+音符形态。`:app:assembleDebug` SUCCESSFUL（1m25s）。
+改动文件：`PlayerIcons.kt`、`TrackRow.kt`、`PlayerSheet.kt` + 文档三件。
+
+## 2026-11-17 夜（四）· 歌词图标分工回退 + 顶栏状态换色 + 删胶囊提示 + 云端路径多目录
+
+1. **图标分工**：用户「播放页 下面菜单栏歌词图标和设置 播放 歌词图标改回原始」。
+   `PlayerIcons` 拆成两个：`Lyrics`（原始四条横线，第四行短一截）+ `LyricsFilled`（§0.14 抄的 Material 气泡+音符）。
+   dock 的「歌词」、设置页「播放 → 歌词」「关于 → 声明」用 `Lyrics`；歌词页信息行悬浮钮用 `LyricsFilled`。
+   **中途被用户纠正一次**：设置页「桌面歌词 → 桌面悬浮歌词」那颗也要保留新图标（本轮先错改成原始，已改回）。
+2. **顶栏状态文字**：用户「顶部正在播放文字颜色看不清」。`PlayerTopBar` 的 `statusText` 从
+   `Palette.TextSecondary` 改 `Palette.TextPrimary`（浅色主题 `#20223A`），`dotColor` 未动。
+3. **删胶囊状态弹窗**：用户「删掉胶囊状态弹窗（顶部文字 状态）」。`PlaybackNotice` 的调用与函数本体（玻璃 pill +
+   `CircularProgressIndicator` + 缓冲/慢网/断网三档文案）全删，连带清掉 5 个只服务它的 animation import；
+   缓冲/断网提示现在只剩顶栏那行状态文字。
+4. **路径支持多条（一行一条）**：
+   - `ServerConfig` / `WebDavConfig` 新增 `rootPaths`（`core:datastore` 的 `splitRootPaths`：trim、`\`→`/`、
+     折叠斜杠、补前导 `/`、去尾 `/`、空行丢弃、distinct、空回落 default）。编译时该函数先写成表达式体，
+     `.ifEmpty{listOf(default)}` 落到 `Sequence` 上触发 `RETURN_TYPE_MISMATCH`，改成函数体 + `toList()` 后通过。
+   - 设置页两个 `ConfigField` 加 `multiLine`（`minLines = 3`），「音乐目录（可选）」/「根路径」开启并补提示；
+     保存时逐行归一化后按 `\n` 拼回（WebDAV 逐行 `normalizePath`，OpenList 逐行 trim），不使用 `trim()` 压行。
+   - OpenList：`RemoteLibrarySyncer` 把每个 root 都当扫描起点（路径本来是绝对路径，流播与聚合不变）。
+   - WebDAV：单目录行为不变；多目录时 `WebDavConfig.effectiveRootPath` 取 `/`，`WebDavLibrarySyncer`
+     用 `copy(rootPath="/")` 扫描、起点为各 root，库内路径因此是「相对服务器根」的绝对路径，避免同名文件撞 uri；
+     `WebDavClient`（collectionUrl / pathFromHref / resolve）与 `OpenListWebDavBridge` 全部改用 `effectiveRootPath`。
+   - 文件夹 Tab：`folderOf` 把 `cloudRoots[key]` 按行切开后取「最长命中目录」归桶；`cloudNamesSnapshot`
+     逐 root 写 `tag + 归一化目录` 键（一个 profile 可能占多条，同名会并排出现，副标题显示具体目录）。
+
+实测：`:app:assembleDebug` SUCCESSFUL（首次因 `splitRootPaths` 类型不匹配失败，修复后 2m20s；图标纠正后再 1m15s）；
+`test` SUCCESSFUL，聚合 `suites=36 tests=277 failures=0 skipped=0`；模拟器 `emulator-5554` 浅色主题截图：
+播放页 dock 首颗图标回到四条横线、顶栏「已暂停」变深、顶部无玻璃 pill；歌词页悬浮钮仍是气泡图标；
+设置页「播放 → 歌词」四条横线、「桌面悬浮歌词」气泡图标。
+改动文件 16 个源码 + 文档三件（清单见交付包）。
+## 2026-11-17 深夜（五）· 返回键二次确认 + 完全关闭软件 + 多行路径键盘 + 保存回填 + 清死代码
+
+用户报「无法使用返回关闭 app」，并要求「再检查项目一遍，发现问题一并修复，修复前逐项向我确认」。
+先只做排查与逐项确认（未动代码），用户拍板后一次性落地四项；随后用户两次纠偏关闭语义，按最终口径重做并实测。
+
+**排查结论（改前）**：库首页单按返回退桌面；设置/搜索单按退回曲库（第二下才退出）；播放页单按收起；
+二级页各有 `BackHandler`。另发现 ①路径框用 `KeyboardType.Uri`（Uri 键盘无回车键，多行目录打不出换行，真 bug）；
+②OpenList 保存后没回填归一化路径（WebDAV 有）；③`RemoteLibrarySyncer.normalizeRoot()` 已成死代码；
+④路径切分口径在 core:datastore / core:network / app 各写一份且无测试。
+
+**用户拍板**：返回键要能关软件、关闭需二次确认；连按逐级返回；音乐库「歌曲」类目按返回弹（取消/确认），
+其它类目或页面逐级返回；四项全做；文件夹同名靠副标题目录区分（无需改代码）。
+
+**改动**：
+- `ui/library/LibraryScreen.kt`：`var exitConfirm` + `BackHandler(enabled = secondary == null)`
+  （`tab != 0 → tab = 0`，否则弹窗）；`AlertDialog` 只留标题「是否关闭软件」+ 取消/确认，无正文。
+  确认分支最终为 `DesktopLyricsService.stop` → `startService(... ACTION_SHUTDOWN)` → `finishAndRemoveTask()`。
+  早前 `stopService` 实测无效（Media3 前台服务被系统拉回，通知与会话仍在），故改显式指令。
+- `feature/player/.../PlaybackService.kt`：新增 `onStartCommand` 处理 `ACTION_SHUTDOWN`
+  （log → `stop()` + `clearMediaItems()` → `stopForeground(STOP_FOREGROUND_REMOVE)` → `stopSelf()` →
+  `START_NOT_STICKY`）；companion 合并为一个（`CHANNEL_ID`/`NOTIFICATION_ID` 转 `private const`，
+  `ACTION_SHUTDOWN` 公开）。**一个类只能有一个 companion**，这里踩过一次。
+- `ui/settings/{OpenListConfigScreen,WebDavConfigScreen}.kt`：`ConfigField` 的 `keyboardOptions` 改为
+  `keyboardType = if (multiLine) KeyboardType.Text else keyboardType`。
+- `ui/settings/OpenListViewModel.kt`：保存成功后 `rootPath = saved.rootPath` 回填。
+- `feature/remote/.../RemoteLibrarySyncer.kt`：删 `normalizeRoot`，留注释指向 `splitRootPaths`。
+- 新增 `core/datastore/src/test/.../RootPathsTest.kt`（8 断言；首版把 `music` 当 `/yd/music` 致 FAILED，
+  改为断言 `/yd/music` + `/music` 后通过）。
+
+**验证**：`:app:assembleDebug` SUCCESSFUL（改 shutdown 后重跑 2m59s）；`test` SUCCESSFUL，聚合
+`suites=37 tests=285 failures=0 skipped=0`（基线 36/277）。装 emulator-5554 实测：
+文件夹 Tab 按返回 → 回「歌曲」且不弹窗；歌曲类目按返回 → 弹「是否关闭软件」；点「取消」→ 回列表、播放继续；
+点「确认」→ `topResumedActivity=launcher`、logcat 出现 `PlaybackService 收到关闭指令，停播并退出` +
+`未在播放且任务被移除，停止服务`、`playbackState=NONE`、`abandonAudioFocus`、通知被移除、进程 `freezing`、
+recents 为空。新增 OpenList 页「音乐目录」框高 3 行，`/yd/a` + 回车 + `/yd/b` 成功分行。
+残留说明（正常，不是 bug）：`dumpsys activity services` 里 `ServiceRecord` 仍在（`startRequested=false`、
+`stopIfKilled=true`，控制器单例仍有一条 `ConnectionRecord` 绑定），`dumpsys media_session` 仍列旧 session id。
+
+**坐标教训**：分类 Tab 命中区是 `x≈40..490, y≈186..221`（`uiautomator dump` 的 bounds 可直接用），
+文件夹 ≈(453,203)。此前记的 (755/810, 339) 是误换算，点不到 Tab 会让人误判「返回直接弹关闭窗」。
+改动 7 个源码文件 + 1 个新测试 + 文档三件；按用户要求**不打包**，直接在项目里改。
+---
+
+## 2026-11-17 晚（六）· 三屏重做落地（启动画面 / 沙漏筛选气泡 / 退出弹窗）
+
+**背景**：用户要求「重新设计软件启动画面、音乐库沙漏弹窗 UI、软件关闭弹窗 UI，给出多套方案让我选择」。
+先出设计稿 `docs/design/2026-11-17-ui-proposals.html`（九套手机 mockup，可切深/浅主题），用户在稿上逐条挑定：
+启动 A「极光呼吸」、沙漏 B「锚定气泡」、关闭 A「玻璃确认卡」，并追加三条修改（图标换应用图标 + 中柱跳动、
+图标不呼吸缩放、删掉黄圈锯齿、删旋转外圈、三根竖条都跳、退出弹窗删副文案）。随后「修改项目」落成 Compose。
+
+**改动**：
+- 新增 `ui/components/MsopLogo.kt`：按 `msop_icon.png` 几何矢量重画（100×100 虚拟画布），三根竖条以底边为轴
+  `scaleY`、`StartOffset` 0/190/380ms 错峰，1.15s 循环。用 Canvas 而不是位图，是因为要「只动其中一根柱子」，
+  且 256px 位图放大到 92dp 会糊。
+- 新增 `ui/components/SplashScreen.kt`：`AmbientBackground` + 固定 92dp 图标 + 字距 0.90em→0.40em 的品牌字 +
+  「私人音乐库」+ 底部细进度条与「正在载入曲库」。无呼吸缩放、无外圈光环（用户当日指定）；
+  跟随 App 深浅色主题，不为系统启动图做适配。
+- 新增 `ui/library/SourceFilterPopover.kt`：`Popup(TopEnd, 44dp, focusable)` 气泡，三行图标+名称+条数，
+  选中态紫底/紫竖条/紫字三重冗余；蒙层由 `LibraryScreen` 根 Box 绘制（黑色 42%）。
+- 新增 `ui/components/ExitConfirmDialog.kt`：232dp 玻璃卡，图标 + 「要退出 MSOP 吗？」+ 继续听/退出，**无副文案**。
+- `ui/icons/PlayerIcons.kt`：新增 `Power` / `AllSources` / `Device`。（`Hourglass` 曾加过，用户当日要求换回漏斗后已删。）
+- `ui/library/LibraryScreen.kt`：筛选从 `DropdownMenu` 换成 `SourceFilterPopover`（图标仍用 `Filter` 漏斗），
+  新增 `sourceCounts`；退出从 `AlertDialog` 换成 `ExitConfirmDialog`；根 Box 末尾加筛选蒙层。
+- `MainActivity.kt`：`AudioPermissionGate` 外层套 `Box`，`AnimatedVisibility` 覆盖 `SplashScreen`，1.1s 后淡出。
+- `res/values/colors.xml` / `themes.xml`：**保持原样**。曾试过把 `windowBackground` 对齐到 `#07080D`
+  并让启动画面固定深色，以消除 Android 12+ 系统启动图与自定义启动画面之间的图标跳变；
+  用户 2026-11-17 明确否决（「真机没有这个问题」），已全部撤销。
+
+**验证**：`:app:compileDebugKotlin` SUCCESSFUL（1m54s）。未装真机复验（用户未要求打包）。
+视觉基线：`docs/design/2026-11-17-ui-proposals.html`；上一版九套全览归档为 `...-v1-九套.html`。

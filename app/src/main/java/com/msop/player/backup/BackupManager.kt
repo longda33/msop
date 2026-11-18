@@ -2,6 +2,8 @@ package com.msop.player.backup
 
 import android.content.Context
 import android.net.Uri
+import androidx.room.withTransaction
+import com.msop.player.core.database.MsopDatabase
 import com.msop.player.core.database.dao.PlaylistDao
 import com.msop.player.core.database.dao.TrackDao
 import com.msop.player.core.database.entity.PlaylistEntity
@@ -44,6 +46,7 @@ import javax.inject.Singleton
 @Singleton
 class BackupManager @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val database: MsopDatabase,
     private val playlistDao: PlaylistDao,
     private val trackDao: TrackDao,
     private val serverConfigStore: ServerConfigStore,
@@ -67,6 +70,10 @@ class BackupManager @Inject constructor(
                     trackIds = playlistDao.trackIds(entity.id),
                 )
             }
+            // 2026-11-18：多台服务器可以同时启用，必须整表导出。曲目的 id/uri 带
+            // profile 前缀，只存第一台的旧备份恢复后会对不上号。
+            val serverProfiles = serverConfigStore.profiles()
+            val webDavProfiles = webDavConfigStore.profiles()
             val server = serverConfigStore.load()
             val webDav = webDavConfigStore.load()
             val tuning = equalizer.exportTuning()
@@ -75,24 +82,11 @@ class BackupManager @Inject constructor(
                 equalizerEnabled = tuning.enabled,
                 equalizerPreset = tuning.presetName,
                 equalizerLevels = tuning.levelsMb,
-                server = server?.let {
-                    ServerBackup(
-                        baseUrl = it.baseUrl,
-                        username = it.username,
-                        allowPlainHttp = it.allowPlainHttp,
-                        appKey = it.appKey,
-                        password = it.password,
-                    )
-                },
-                webDav = webDav?.let {
-                    WebDavBackup(
-                        baseUrl = it.baseUrl,
-                        username = it.username,
-                        rootPath = it.rootPath,
-                        allowPlainHttp = it.allowPlainHttp,
-                        password = it.password,
-                    )
-                },
+                // 单条字段保留给旧版本 App 读；新版本优先读 servers / webDavs。
+                server = server?.toBackup(serverConfigStore.isEnabled(server.id)),
+                webDav = webDav?.toBackup(webDavConfigStore.isEnabled(webDav.id)),
+                servers = serverProfiles.map { it.toBackup(serverConfigStore.isEnabled(it.id)) },
+                webDavs = webDavProfiles.map { it.toBackup(webDavConfigStore.isEnabled(it.id)) },
             )
             val manifest = BackupManifest(
                 createdAt = System.currentTimeMillis(),
@@ -128,18 +122,23 @@ class BackupManager @Inject constructor(
             var usableTracks = 0
             var skippedTracks = 0
 
-            playlists.forEach { backup ->
-                val usable = backup.trackIds.filter { it in knownIds }
-                skippedTracks += backup.trackIds.size - usable.size
-                val existing = playlistDao.findByName(backup.name)
-                val playlistId = existing?.id
-                    ?: playlistDao.insertPlaylist(
-                        PlaylistEntity(name = backup.name, createdAt = backup.createdAt),
-                    )
-                // addTracks 内部用 IGNORE：同名歌单里已有曲目不会再插一遍
-                playlistDao.addTracks(playlistId, usable, System.currentTimeMillis())
-                usableTracks += usable.size
-                restoredPlaylists++
+            // 2026-11-17 修复：整批歌单在一个事务里落库。原来逐个 insert，第 30 个歌单
+            // 撞上约束/磁盘错误时，前 29 个已经写进去了，用户看到的是「恢复了一半」，
+            // 而且重试会把它们再插一遍（同名会被 findByName 认出来，但曲目顺序已乱）。
+            database.withTransaction {
+                playlists.forEach { backup ->
+                    val usable = backup.trackIds.filter { it in knownIds }
+                    skippedTracks += backup.trackIds.size - usable.size
+                    val existing = playlistDao.findByName(backup.name)
+                    val playlistId = existing?.id
+                        ?: playlistDao.insertPlaylist(
+                            PlaylistEntity(name = backup.name, createdAt = backup.createdAt),
+                        )
+                    // addTracks 内部用 IGNORE：同名歌单里已有曲目不会再插一遍
+                    playlistDao.addTracks(playlistId, usable, System.currentTimeMillis())
+                    usableTracks += usable.size
+                    restoredPlaylists++
+                }
             }
 
             settings?.let(::applySettings)
@@ -163,33 +162,94 @@ class BackupManager @Inject constructor(
                 levelsMb = settings.equalizerLevels,
             ),
         )
-        settings.server?.let { server ->
-            // 2026-11-15：密码随备份一起恢复，导入后无需再手动输入。
-            // 旧备份没有 password 字段 → 默认 ""，此时保留本机已有的密码更友好。
-            val current = serverConfigStore.load()
-            serverConfigStore.save(
-                ServerConfig(
-                    baseUrl = server.baseUrl,
-                    username = server.username,
-                    password = server.password.ifEmpty { current?.password.orEmpty() },
-                    allowPlainHttp = server.allowPlainHttp,
-                    appKey = server.appKey,
-                ),
-            )
-        }
-        settings.webDav?.let { webDav ->
-            val current = webDavConfigStore.load()
-            webDavConfigStore.save(
-                WebDavConfig(
-                    baseUrl = webDav.baseUrl,
-                    username = webDav.username,
-                    password = webDav.password.ifEmpty { current?.password.orEmpty() },
-                    rootPath = webDav.rootPath,
-                    allowPlainHttp = webDav.allowPlainHttp,
-                ),
-            )
-        }
+        restoreServers(settings)
+        restoreWebDavs(settings)
     }
+
+    /** 整表恢复 OpenList 配置；旧备份的单条 server 字段也能读。 */
+    private fun restoreServers(settings: SettingsBackup) {
+        val existing = serverConfigStore.profiles().associateBy { it.id }
+        val backups = settings.servers.ifEmpty { listOfNotNull(settings.server) }
+        val used = HashSet<String>()
+        val configs = backups.mapIndexed { index, backup ->
+            val preferred = backup.id.takeIf { it.isNotBlank() && it in existing }
+                ?: existing.values.firstOrNull {
+                    it.baseUrl == backup.baseUrl && it.username == backup.username
+                }?.id
+                ?: "p${index + 1}"
+            var id = preferred
+            var suffix = existing.size + 2
+            while (!used.add(id)) id = "p${suffix++}"
+            ServerConfig(
+                id = id,
+                name = backup.name,
+                baseUrl = backup.baseUrl,
+                username = backup.username,
+                // 旧备份 password 缺省为 ""，此时沿用本机同 id 配置里的密码。
+                password = backup.password.ifEmpty { existing[preferred]?.password.orEmpty() },
+                allowPlainHttp = backup.allowPlainHttp,
+                appKey = backup.appKey,
+                rootPath = backup.rootPath,
+                concurrency = backup.concurrency,
+            )
+        }
+        val enabled = backups.zip(configs).filter { (backup, _) -> backup.enabled }.map { (_, c) -> c.id }
+        serverConfigStore.restoreAll(configs, enabled)
+    }
+
+    /** 整表恢复 WebDAV 配置；语义同 [restoreServers]。 */
+    private fun restoreWebDavs(settings: SettingsBackup) {
+        val existing = webDavConfigStore.profiles().associateBy { it.id }
+        val backups = settings.webDavs.ifEmpty { listOfNotNull(settings.webDav) }
+        val used = HashSet<String>()
+        val configs = backups.mapIndexed { index, backup ->
+            val preferred = backup.id.takeIf { it.isNotBlank() && it in existing }
+                ?: existing.values.firstOrNull {
+                    it.baseUrl == backup.baseUrl && it.username == backup.username
+                }?.id
+                ?: "p${index + 1}"
+            var id = preferred
+            var suffix = existing.size + 2
+            while (!used.add(id)) id = "p${suffix++}"
+            WebDavConfig(
+                id = id,
+                name = backup.name,
+                baseUrl = backup.baseUrl,
+                username = backup.username,
+                password = backup.password.ifEmpty { existing[preferred]?.password.orEmpty() },
+                rootPath = backup.rootPath.ifBlank { "/" },
+                allowPlainHttp = backup.allowPlainHttp,
+                concurrency = backup.concurrency,
+            )
+        }
+        val enabled = backups.zip(configs).filter { (backup, _) -> backup.enabled }.map { (_, c) -> c.id }
+        webDavConfigStore.restoreAll(configs, enabled)
+    }
+
+    private fun ServerConfig.toBackup(enabled: Boolean) = ServerBackup(
+        baseUrl = baseUrl,
+        username = username,
+        allowPlainHttp = allowPlainHttp,
+        appKey = appKey,
+        password = password,
+        id = id,
+        name = name,
+        rootPath = rootPath,
+        concurrency = concurrency,
+        enabled = enabled,
+    )
+
+    private fun WebDavConfig.toBackup(enabled: Boolean) = WebDavBackup(
+        baseUrl = baseUrl,
+        username = username,
+        rootPath = rootPath,
+        allowPlainHttp = allowPlainHttp,
+        password = password,
+        id = id,
+        name = name,
+        concurrency = concurrency,
+        enabled = enabled,
+    )
 
     private fun writeZip(
         uri: Uri,
@@ -222,12 +282,25 @@ class BackupManager @Inject constructor(
         val result = mutableMapOf<String, String>()
         input.use { raw ->
             ZipInputStream(BufferedInputStream(raw)).use { zip ->
+                var entryCount = 0
+                var totalBytes = 0L
                 while (true) {
                     val entry = zip.nextEntry ?: break
                     if (entry.isDirectory) continue
+                    // 2026-11-17 修复：只限制单条目时，一个塞了 10 万个空条目的 zip
+                    // 仍能把循环拖到天荒地老（每个条目都要走一次 inflate）。这里同时限条数。
+                    entryCount++
+                    if (entryCount > MAX_ENTRIES) {
+                        error("备份条目过多，已中止（上限 $MAX_ENTRIES 个）")
+                    }
                     val name = entry.name.substringAfterLast('/')
                     if (name !in ALLOWED_ENTRIES) continue
-                    result[name] = readLimited(zip, MAX_ENTRY_BYTES).toString(Charsets.UTF_8)
+                    val bytes = readLimited(zip, MAX_ENTRY_BYTES)
+                    totalBytes += bytes.size
+                    if (totalBytes > MAX_TOTAL_BYTES) {
+                        error("备份解压后过大，已中止（上限 ${MAX_TOTAL_BYTES / 1024 / 1024} MB）")
+                    }
+                    result[name] = String(bytes, Charsets.UTF_8)
                 }
             }
         }
@@ -259,6 +332,9 @@ class BackupManager @Inject constructor(
         const val FILE_PLAYLISTS = "playlists.json"
         const val FILE_SETTINGS = "settings.json"
         const val MAX_ENTRY_BYTES = 4 * 1024 * 1024
+        /** 三个条目各自的实际上限都很小，12 MB 总上限只用于挡住畸形压缩包。 */
+        const val MAX_TOTAL_BYTES = 12L * 1024 * 1024
+        const val MAX_ENTRIES = 32
         val ALLOWED_ENTRIES = setOf(FILE_MANIFEST, FILE_PLAYLISTS, FILE_SETTINGS)
     }
 }

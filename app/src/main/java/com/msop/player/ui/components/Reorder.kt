@@ -11,9 +11,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import com.msop.player.ui.icons.PlayerIcons
+import com.msop.player.ui.theme.LocalMsopPalette
 import com.msop.player.ui.theme.Palette
 import kotlin.math.roundToInt
 
@@ -23,8 +25,9 @@ import kotlin.math.roundToInt
  * 做法：按住右侧拖动手柄 → 整行跟手（`graphicsLayer` 位移，不动布局），
  * 越过半行就把目标索引 +1/-1，同时其它行整体让位一格；抬手时把「谁移到哪」交给调用方落库。
  *
- * 为什么不用 `LazyListState` 的自动滚动：歌单一般一屏就能看完，先把「跟着手指走」做对，
- * 长列表的贴边滚动留到真的不够用时再说。
+ * 2026-11-17（用户报「浅色模式 队列 拖动按钮看不见」/ 深夜「按住拖动按钮，另一个手指滑动列表」）：
+ * - 颜色改主题感知：深色白 45%，浅色墨 42%，被按住那行亮成强调紫（原来 `TextTertiary 50%` 浅底几乎看不见）；
+ * - 手势保持/恢复 `detectDragGesturesAfterLongPress`——用户要的是「按住手柄 = 抓取」，不是一碰就抢手势。
  */
 @Stable
 class ReorderState(private val rowHeightPx: Float) {
@@ -73,7 +76,14 @@ class ReorderState(private val rowHeightPx: Float) {
         else -> 0f
     }
 
-    /** 挂在拖动手柄上的手势：长按后整行跟手，抬手把 (from, to) 交给 [onDrop]。 */
+    /**
+     * 挂在拖动手柄上的手势：**长按 500ms 起拖**，抬手把 (from, to) 交给 [onDrop]。
+     *
+     * 2026-11-17 深夜用户回滚说明：「要的是一个手指按住拖动按钮，另一个手指可以滑动列表」
+     * ——用户要的是「按住 = 抓取」，不是「一碰就抢手势」。所以把白天改成
+     * `detectDragGestures` 的那次改动撤回，恢复长按版本；手柄尺寸也回到 28dp。
+     * 保留的只有颜色：浅色主题下原来的 `TextTertiary 50%` 在浅底上几乎看不见。
+     */
     fun handleModifier(
         index: Int,
         count: () -> Int,
@@ -94,6 +104,9 @@ class ReorderState(private val rowHeightPx: Float) {
 /**
  * 拖动手柄。按住它时整行跟手——用户明确要求「按住拖动按钮 同时可以滑动条目」，
  * 所以手柄只是抓手，位移挂在整行上。
+ *
+ * 颜色：浅色主题下原来那档「灰 50%」几乎看不见，改成墨色 42%；深色仍用白 45%
+ * （原来的 `TextTertiary` 在深底上偏灰，稍提亮更清楚）。
  */
 @Composable
 fun ReorderHandle(
@@ -103,6 +116,8 @@ fun ReorderHandle(
     onDrop: (Int, Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val isDark = LocalMsopPalette.current.isDark
+    val idleTint = if (isDark) Color.White.copy(alpha = 0.45f) else Color(0xFF20223A).copy(alpha = 0.42f)
     Box(
         modifier = modifier
             .size(28.dp)
@@ -111,8 +126,8 @@ fun ReorderHandle(
     ) {
         Icon(
             imageVector = PlayerIcons.DragHandle,
-            contentDescription = "拖动排序",
-            tint = Palette.TextTertiary.copy(alpha = if (state.from == index) 0.9f else 0.5f),
+            contentDescription = "长按拖动排序",
+            tint = if (state.from == index) Palette.BlueLight else idleTint,
             modifier = Modifier.size(17.dp),
         )
     }

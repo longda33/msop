@@ -46,14 +46,25 @@ class ScanNotifier(private val context: Context) {
 
     /**
      * @param enriched 本次补齐标签的曲目数。0 时用原来的文案，避免通知里出现「补齐标签 0 首」这种噪音。
+     * @param libraryTotal 扫描结束后曲库总条数（本机 + 云端，按展示层去重）。
+     *   2026-11-18（用户报「重扫曲库只显示本机歌曲数量」）：扫描只覆盖本机，
+     *   只报本机条数会让人以为云端歌全丢了，所以带上曲库总数。
      */
-    fun finished(stats: ScanStats, enriched: Int = 0) {
+    fun finished(stats: ScanStats, enriched: Int = 0, libraryTotal: Int = 0) {
         if (!canNotify()) return
         val seconds = stats.elapsedMs / 1000
+        val total = if (libraryTotal > 0) libraryTotal else stats.scanned
         val text = if (enriched > 0) {
-            context.getString(R.string.scan_done_enriched, stats.scanned, stats.written, enriched, seconds)
+            context.getString(
+                R.string.scan_done_enriched,
+                stats.scanned,
+                total,
+                stats.written,
+                enriched,
+                seconds,
+            )
         } else {
-            context.getString(R.string.scan_done, stats.scanned, stats.written, seconds)
+            context.getString(R.string.scan_done, stats.scanned, total, stats.written, seconds)
         }
         val notification = base()
             .setContentTitle(context.getString(R.string.scan_title))

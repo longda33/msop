@@ -2,6 +2,7 @@ package com.msop.player.ui.library
 
 import com.msop.player.core.model.SourceType
 import com.msop.player.core.model.Track
+import com.msop.player.core.model.TrackMerger
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

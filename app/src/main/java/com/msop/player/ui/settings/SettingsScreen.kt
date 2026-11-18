@@ -235,12 +235,13 @@ fun SettingsScreen(
                 )
                 InsetDivider()
                 SettingRow(
-                    icon = PlayerIcons.Cloud,
+                    // 2026-11-18 用户指令：「openlist 服务器图标改为 openlist 图标」
+                    icon = PlayerIcons.OpenList,
                     tint = Palette.Teal,
                     title = "OpenList 服务器",
                     subtitle = if (openList.configured) {
                         val enabledCount = openList.profiles.count { it.enabled }
-                        "${openList.profiles.size} 台已保存 · $enabledCount 台启用中 · ${openList.syncedCount} 首远程歌曲 · 点此管理"
+                        "${openList.profiles.size} 台已保存 · $enabledCount 台启用中 · ${openList.syncedCount} 首远程歌曲"
                     } else {
                         "填地址、账号，测试连通后同步远程曲库"
                     },
@@ -255,7 +256,7 @@ fun SettingsScreen(
                     title = "WebDAV 服务器",
                     subtitle = if (webDav.configured) {
                         val enabledCount = webDav.profiles.count { it.enabled }
-                        "${webDav.profiles.size} 台已保存 · $enabledCount 台启用中 · ${webDav.syncedCount} 首 WebDAV 歌曲 · 点此管理"
+                        "${webDav.profiles.size} 台已保存 · $enabledCount 台启用中 · ${webDav.syncedCount} 首 WebDAV 歌曲"
                     } else {
                         "独立第三音源，填地址与音乐目录后同步"
                     },
@@ -274,6 +275,11 @@ fun SettingsScreen(
                         scan.running ->
                             "正在扫描… 已扫到 ${scan.scanned} 首（写入 ${scan.written} 条）"
                         scan.failed -> "上次扫描失败，可以再点一次重试"
+                        scanResultVisible && scan.libraryTotal > 0 ->
+                            // 2026-11-18（用户报「重扫曲库只显示本机歌曲数量」）：扫的是本机，
+                            // 但结果里要带上曲库总数（本机 + 云端），否则看起来像云端全丢了。
+                            "扫描完成 · 本机 ${scan.scanned} 首 · 曲库共 ${scan.libraryTotal} 首" +
+                                " · 用时 ${"%.1f".format(scan.elapsedMs / 1000f)} 秒"
                         scanResultVisible ->
                             "扫描完成 · 共 ${scan.scanned} 首 · 用时 ${"%.1f".format(scan.elapsedMs / 1000f)} 秒"
                         else -> "全量重扫会重新读取所有文件的标签与封面"
@@ -345,7 +351,10 @@ fun SettingsScreen(
 
             SettingsGroup("桌面歌词") {
                 SettingRow(
-                    icon = PlayerIcons.Lyrics,
+                    // 2026-11-17 深夜（续）用户纠正：「桌面悬浮歌词」这颗**保持新形态**
+                    // （与歌词页信息行的悬浮钮一致），只有「播放」组里的「歌词」和播放页 dock
+                    // 那颗才改回原始四条横线。
+                    icon = PlayerIcons.LyricsFilled,
                     tint = Palette.BlueLight,
                     title = "桌面悬浮歌词",
                     subtitle = "在桌面显示当前歌词，可拖动、锁定与调样式",
@@ -357,7 +366,8 @@ fun SettingsScreen(
 
             SettingsGroup("后台播放") {
                 SettingRow(
-                    icon = PlayerIcons.Queue,
+                    // 2026-11-18 用户指令：「电池优化白名单图标改为电池图标」
+                    icon = PlayerIcons.Battery,
                     tint = Palette.Gold,
                     title = "电池优化白名单",
                     subtitle = if (batteryExempt) {
@@ -407,7 +417,8 @@ fun SettingsScreen(
                 )
                 InsetDivider()
                 SettingRow(
-                    icon = PlayerIcons.Cloud,
+                    // 2026-11-18 用户指令：「远程播放缓存图标改为硬盘图标」
+                    icon = PlayerIcons.HardDrive,
                     tint = Palette.BlueLight,
                     title = "远程播放缓存",
                     subtitle = if (cache.loading) {
@@ -420,7 +431,8 @@ fun SettingsScreen(
                 )
                 InsetDivider()
                 SettingSwitchRow(
-                    icon = Icons.Filled.Settings,
+                    // 2026-11-18 用户指令：「仅 wifi 缓存图标改为 wifi 图标」
+                    icon = PlayerIcons.Wifi,
                     tint = Palette.Gold,
                     title = "仅 Wi-Fi 缓存",
                     subtitle = if (cache.wifiOnly) {
@@ -463,7 +475,8 @@ fun SettingsScreen(
 
             SettingsGroup("关于") {
                 SettingRow(
-                    icon = PlayerIcons.Queue,
+                    // 2026-11-18 用户指令：「版本图标改成 i 图标」
+                    icon = PlayerIcons.InfoCircle,
                     tint = Palette.TextSecondary,
                     title = "版本",
                     value = versionName,
@@ -492,7 +505,8 @@ fun SettingsScreen(
                 text = {
                     Text(
                         "将删除 ${cache.count} 张缓存封面（${formatBytes(cache.bytes)}）。" +
-                            "不会删除音频文件，下次播放时会重新生成。",
+                            "不会删除音频文件，清理后立刻按文件内嵌封面重建；" +
+                            "云端歌曲需要重新探测，大约一两分钟陆续回来。",
                     )
                 },
                 confirmButton = {

@@ -11,6 +11,7 @@ import com.msop.player.core.network.OpenListException
 import com.msop.player.core.network.ServerUrl
 import com.msop.player.core.network.SubsonicClient
 import com.msop.player.core.network.userMessage
+import com.msop.player.feature.remote.RemoteCoverExtractor
 import com.msop.player.feature.remote.RemoteLibrarySyncer
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -34,6 +35,7 @@ class OpenListViewModel @Inject constructor(
     private val client: OpenListClient,
     private val subsonic: SubsonicClient,
     private val syncer: RemoteLibrarySyncer,
+    private val remoteCovers: RemoteCoverExtractor,
 ) : ViewModel() {
 
     /** 列表里的一行。 */
@@ -192,7 +194,12 @@ class OpenListViewModel @Inject constructor(
                         password = current.password,
                         allowPlainHttp = normalized.isPlainHttp && allowPlainHttp,
                         appKey = current.appKey.trim(),
-                        rootPath = current.rootPath.trim(),
+                        // 2026-11-17 深夜（续）：「路径支持填写多条（一行一条）」——
+                        // 保存时逐行 trim 后按行存回，空行丢掉；不要用 trim() 把多行压成一行。
+                        rootPath = current.rootPath.lines()
+                            .map { it.trim() }
+                            .filter { it.isNotEmpty() }
+                            .joinToString("\n"),
                         concurrency = current.concurrency.toIntOrNull() ?: 0,
                     ),
                 )
@@ -201,6 +208,9 @@ class OpenListViewModel @Inject constructor(
                     editingId = saved.id,
                     url = normalized.baseUrl,
                     name = saved.name,
+                    // 2026-11-17 深夜（五）：把归一化后的路径回填到输入框，
+                    // 否则保存后框里还是原文（多行时看不出一行一条的整理结果）。
+                    rootPath = saved.rootPath,
                 )
                 refresh()
 
@@ -423,6 +433,11 @@ class OpenListViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             runCatching { syncer.fillMissingDurations() }
                 .onSuccess { if (it > 0) refresh() }
+            // 2026-11-18（用户报「新添加服务器后封面不显示，要重启才回来」）：
+            // 新入库的曲目 `coverUri` 还是 null，以前要等下次冷启动的探测流程才补；
+            // 同步完顺手探一轮，新加的服务器当场就有封面。
+            runCatching { remoteCovers.extract() }
+                .onSuccess { if (it.covers > 0) refresh() }
         }
         return "同步完成：${stats.summary}"
     }

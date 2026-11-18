@@ -11,10 +11,14 @@ import com.msop.player.core.datastore.ServerConfigStore
 import com.msop.player.core.datastore.WebDavConfigStore
 import com.msop.player.core.model.SourceType
 import com.msop.player.core.model.Track
+import com.msop.player.core.model.TrackMerger
 import com.msop.player.core.network.DownloadCenter
 import com.msop.player.core.network.RemoteFileDownloader
 import com.msop.player.feature.local.metadata.LocalMetadataEnricher
+import com.msop.player.feature.local.saf.SafDirectoryStore
+import com.msop.player.feature.local.saf.rootPaths
 import com.msop.player.feature.player.PlaybackController
+import com.msop.player.feature.remote.RemoteCoverExtractor
 import com.msop.player.feature.player.PlaybackState
 import com.msop.player.feature.player.PlayMode
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -46,11 +50,13 @@ class LibraryViewModel @Inject constructor(
     trackDao: TrackDao,
     private val playback: PlaybackController,
     private val enricher: LocalMetadataEnricher,
+    private val remoteCovers: RemoteCoverExtractor,
     private val favoriteDao: FavoriteDao,
     private val downloader: RemoteFileDownloader,
     private val downloadCenter: DownloadCenter,
     private val serverConfigStore: ServerConfigStore,
     private val webDavConfigStore: WebDavConfigStore,
+    private val safDirectories: SafDirectoryStore,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -69,15 +75,69 @@ class LibraryViewModel @Inject constructor(
     private val _cloudRoots = MutableStateFlow(cloudRootsSnapshot())
     val cloudRoots: StateFlow<Map<String, String>> = _cloudRoots.asStateFlow()
 
-    /** 重读配置页里填的云端音乐目录（键与 `LibraryScreen.folderOf` 的前缀一致）。 */
-    fun refreshCloudRoots() {
-        val fresh = cloudRootsSnapshot()
-        if (fresh != _cloudRoots.value) _cloudRoots.value = fresh
+    /**
+     * 本机「设置里添加的音乐目录」根路径（长的在前），文件夹 Tab 用它聚合。
+     *
+     * 2026-11-17（用户报「文件夹 不要有那么多路径，显示设置界面填写的路径就行」）：
+     * 之前本机按曲目 `localPath` 的上级目录切，Music/周杰伦、Music/林俊杰 每条一个文件夹。
+     * 现在改成「曲目归属哪一个已授权目录」，一个目录一条。
+     */
+    private val _localRoots = MutableStateFlow(localRootsSnapshot())
+    val localRoots: StateFlow<List<String>> = _localRoots.asStateFlow()
+
+    /** 重读配置页里填的音乐目录（云端 rootPath + 本机 SAF 目录）。 */
+    fun refreshLibraryRoots() {
+        val freshCloud = cloudRootsSnapshot()
+        if (freshCloud != _cloudRoots.value) _cloudRoots.value = freshCloud
+        val freshNames = cloudNamesSnapshot()
+        if (freshNames != _cloudNames.value) _cloudNames.value = freshNames
+        val freshLocal = localRootsSnapshot()
+        if (freshLocal != _localRoots.value) _localRoots.value = freshLocal
     }
+
+    /** 兼容旧调用点：过去只刷云端。 */
+    fun refreshCloudRoots() = refreshLibraryRoots()
+
+    private fun localRootsSnapshot(): List<String> =
+        runCatching { safDirectories.rootPaths() }.getOrDefault(emptyList())
 
     private fun cloudRootsSnapshot(): Map<String, String> = buildMap {
         serverConfigStore.profiles().forEach { put("openlist:${it.id}", it.rootPath) }
         webDavConfigStore.profiles().forEach { put("webdav:${it.id}", it.rootPath) }
+    }
+
+    /**
+     * 云端音源的**显示名**，键与文件夹聚合用的 key 完全一致（`openlist:/yd/musicweb`）。
+     *
+     * 2026-11-17 深夜用户指令：「openlist webdav 名称使用设置界面填写的名称」——
+     * 文件夹 Tab 原来显示目录末段 / 「根目录」，用户看不出这是哪台服务器。
+     * 注意键必须用 `tag + 归一化 rootPath`：文件夹的键里**没有 profile id**
+     * （见 `LibraryScreen.folderOf`），按 id 拼出来的键永远对不上。
+     */
+    private val _cloudNames = MutableStateFlow(cloudNamesSnapshot())
+    val cloudNames: StateFlow<Map<String, String>> = _cloudNames.asStateFlow()
+
+    private fun cloudNamesSnapshot(): Map<String, String> = buildMap {
+        // 2026-11-17 深夜（续）：「路径支持填写多条（一行一条）」——一个配置可能有多条目录，
+        // 每条目录在文件夹 Tab 里都是独立的一条，所以每个 root 都要写一个键（同名也算）。
+        serverConfigStore.profiles().forEach { profile ->
+            profile.rootPaths.forEach { root ->
+                put("openlist:" + normalizeCloudRootPath(root), profile.name)
+            }
+        }
+        webDavConfigStore.profiles().forEach { profile ->
+            profile.rootPaths.forEach { root ->
+                put("webdav:" + normalizeCloudRootPath(root), profile.name)
+            }
+        }
+    }
+
+    /** 与 `LibraryScreen.normalizeCloudRoot` 同口径：空串 = 整个盘 → `/`。 */
+    private fun normalizeCloudRootPath(root: String): String {
+        val trimmed = root.trim()
+        if (trimmed.isEmpty()) return "/"
+        val withLeading = if (trimmed.startsWith("/")) trimmed else "/$trimmed"
+        return withLeading.trimEnd('/').ifEmpty { "/" }
     }
 
     /** `playTrack` 用的 id→下标索引，按列表引用失效（P5-04）。 */
@@ -235,6 +295,10 @@ class LibraryViewModel @Inject constructor(
                 // warmCovers 永远修不好这批。
                 runCatching { enricher.repairBrokenCovers() }
                 runCatching { enricher.warmCovers() }
+                // 2026-11-17 用户报云端歌曲内嵌封面不显示：本地预热完再补云端。
+                // 并发上限 4 在 RemoteCoverExtractor 内部用 Semaphore 控制，
+                // 不阻塞首屏（这段本来就在 Dispatchers.IO 上、延后 600ms）。
+                runCatching { remoteCovers.extract() }
             }
         }
     }

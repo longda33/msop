@@ -4,6 +4,10 @@ import android.app.Activity
 import android.content.Context
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import android.widget.Toast
 import android.os.SystemClock
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.CubicBezierEasing
@@ -90,16 +94,21 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.msop.player.core.model.Track
+import com.msop.player.desktop.DesktopLyricsService
 import com.msop.player.feature.lyrics.Lyrics
 import com.msop.player.ui.components.CoverThumb
 import com.msop.player.ui.components.artSeed
 import com.msop.player.ui.components.glassSurface
 import com.msop.player.ui.icons.PlayerIcons
+import com.msop.player.ui.settings.DesktopLyricsViewModel
 import com.msop.player.ui.theme.LocalMsopPalette
 import com.msop.player.ui.theme.Palette
 import com.msop.player.ui.theme.Shapes
@@ -354,6 +363,9 @@ private fun LyricsTrackHeader(
                 modifier = Modifier.padding(top = 1.dp),
             )
         }
+        // 2026-11-17 深夜（用户指令「位置和 ShuYin 一样，横屏不添加」）：
+        // ShuYin 把桌面歌词开关放在歌词页信息行最右（收藏之后、收起之前），这里同位置。
+        FloatingLyricsButton()
     }
 }
 
@@ -490,6 +502,67 @@ private fun LyricsToolButton(
             contentDescription = description,
             tint = ink.copy(alpha = 0.90f),
             modifier = Modifier.size(size * 0.52f),
+        )
+    }
+}
+
+/**
+ * 悬浮歌词（桌面歌词）开关——**歌词页信息行最右**，紧挨歌名/歌手，形态对齐 ShuYin。
+ *
+ * 2026-11-17 深夜用户指令：「歌词悬浮按钮位置和ShuYin一样，横屏不添加」。
+ * ShuYin `PlayerScreen.kt` 的就是把 `Icons.Filled.Lyrics` 这颗 IconButton 放在歌词页顶部
+ * 那一行（封面 + 歌名/歌手 + 收藏 + 悬浮歌词 + 收起），我们这里同位置、同「裸图标无边框」形态；
+ * 横屏歌词页没有信息行，所以横屏工具条**不加**这颗按钮。
+ *
+ * 复用 P7-08 已有的 [DesktopLyricsService]：没开权限时先拉起系统「显示在其他应用上层」授权页。
+ */
+@Composable
+private fun FloatingLyricsButton() {
+    val context = LocalContext.current
+    val dlVm: DesktopLyricsViewModel = hiltViewModel()
+    val dlState by dlVm.state.collectAsStateWithLifecycle()
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) {
+        if (Settings.canDrawOverlays(context)) {
+            dlVm.setEnabled(true)
+            DesktopLyricsService.start(context)
+            Toast.makeText(context, "已开启悬浮歌词", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(context, "还没拿到悬浮窗权限，请在该页面允许后返回", Toast.LENGTH_SHORT).show()
+        }
+    }
+    Box(
+        modifier = Modifier
+            .size(34.dp)
+            .clip(CircleShape)
+            .clickable {
+                when {
+                    dlState.enabled -> {
+                        dlVm.setEnabled(false)
+                        DesktopLyricsService.stop(context)
+                        Toast.makeText(context, "已关闭悬浮歌词", Toast.LENGTH_SHORT).show()
+                    }
+                    Settings.canDrawOverlays(context) -> {
+                        dlVm.setEnabled(true)
+                        DesktopLyricsService.start(context)
+                        Toast.makeText(context, "已开启悬浮歌词", Toast.LENGTH_SHORT).show()
+                    }
+                    else -> launcher.launch(
+                        Intent(
+                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:${context.packageName}"),
+                        ),
+                    )
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = PlayerIcons.LyricsFilled,
+            contentDescription = if (dlState.enabled) "关闭悬浮歌词" else "开启悬浮歌词",
+            tint = if (dlState.enabled) Palette.BlueLight else Palette.TextSecondary,
+            modifier = Modifier.size(19.dp),
         )
     }
 }
@@ -1177,10 +1250,10 @@ fun LandscapeLyricsPane(
  * 后面那张模糊封面透上来就是玻璃观感（项目其它玻璃卡用的是 Kyant0 真折射，
  * 但播放页是遮住外层采样的 overlay，这里用同色系的「透光玻璃」等价实现）。
  *
- * 2026-11-16 晚用户需求「歌词横屏 迷你控制条窗口透明度改成和迷你条一样」：
- * 原来这片白 0.34→0.12 的渐变在横屏模糊封面上几乎透底，跟迷你条/导航栏
- * 那种 ShuYin 垫色不是一个观感。这里直接改用与 `MiniPlayer` 完全相同的
- * 浅 `FAFAFA 0.72` / 深 `121212 0.74` 垫色（2 dp 高光描边保留），两处看起来是同一块玻璃。
+ * 2026-11-17 用户再报透明度太高：与 `MiniPlayer` / `ShuYinNavBar` 同步改成
+ * 浅 `FAFAFA 0.90` / 深 `121212 0.92` 垫色（2 dp 高光描边保留），三处是同一块玻璃。
+ * 2026-11-17 晚回滚：0.90/0.92 会把后面的模糊封面彻底挡住，玻璃变实心板；
+ * 三处统一回到上游 ShuYin 的 0.55 / 0.60，靠高光描边和字色保证可读。
  */
 @Composable
 private fun LyricsGlassControls(
@@ -1195,12 +1268,14 @@ private fun LyricsGlassControls(
     val shape = RoundedCornerShape(20.dp)
     val isLightTheme = MaterialTheme.colorScheme.surface.luminance() >= 0.5f
     // 与 MiniPlayer / ShuYinNavBar 同一组垫色，保证「迷你条」和「横屏迷你卡」是同一块玻璃。
-    val glassFill = if (isLightTheme) Color(0xFFFAFAFA).copy(0.72f) else Color(0xFF121212).copy(0.74f)
+    val glassFill = if (isLightTheme) Color(0xFFFAFAFA).copy(0.55f) else Color(0xFF121212).copy(0.60f)
     Column(
         modifier = modifier
             .clip(shape)
             .background(glassFill)
             .border(
+                // 2026-11-17 晚回滚：这条描边曾加到 1.5dp / White 0.55→0.16，用户判定「效果难看」，
+                // 与导航条/迷你条一起退回原参数（1dp / 0.42→0.12）。
                 width = 1.dp,
                 brush = Brush.verticalGradient(
                     listOf(Color.White.copy(alpha = 0.42f), Color.White.copy(alpha = 0.12f)),

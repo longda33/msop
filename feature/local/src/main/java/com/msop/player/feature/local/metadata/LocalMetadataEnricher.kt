@@ -170,6 +170,29 @@ class LocalMetadataEnricher(
     }
 
     /**
+     * 全库重建封面（2026-11-18 用户报「清除封面缓存后封面不显示，要重扫+重启才回来」）。
+     *
+     * 清缓存只删了文件、没动数据库，`coverUri` 于是全部指向不存在的文件；而
+     * [repairBrokenCovers] 只处理前 [DEFAULT_COVER_LIMIT] 首，且只在冷启动时跑一次。
+     * 这里先清空全部引用，再分批预热直到补不出新的为止（没有内嵌图的曲目会一直命中，
+     * 所以用「这一轮一张都没补到就收手」当终止条件）。
+     */
+    suspend fun rebuildCovers(batch: Int = DEFAULT_COVER_LIMIT): Int {
+        val startedAt = now()
+        val cleared = store.clearAllCovers()
+        var restored = 0
+        var rounds = 0
+        while (rounds < MAX_REBUILD_ROUNDS) {
+            val stats = warmCovers(batch)
+            restored += stats.covers
+            rounds++
+            if (stats.candidates < batch || stats.covers == 0) break
+        }
+        AppLog.i("封面重建 清空引用=$cleared 重补=$restored 轮次=$rounds 耗时=${now() - startedAt}ms")
+        return restored
+    }
+
+    /**
      * 清理不再被任何曲目引用的封面文件。
      *
      * 只在全量扫描之后调用：那是唯一会删除曲目的路径，也就唯一可能产生孤儿封面。
@@ -187,5 +210,8 @@ class LocalMetadataEnricher(
 
         /** 音质补齐单次上限。读 MediaExtractor 比读标签快，500 首约几秒。 */
         const val DEFAULT_QUALITY_LIMIT: Int = 500
+
+        /** 封面重建最多跑多少批（防御：全是无内嵌图的曲目时避免死循环）。 */
+        private const val MAX_REBUILD_ROUNDS: Int = 30
     }
 }

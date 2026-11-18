@@ -2,6 +2,7 @@ package com.msop.player.feature.remote
 
 import com.msop.player.core.common.log.AppLog
 import com.msop.player.core.database.dao.TrackDao
+import com.msop.player.core.database.dao.deleteByIdsChunked
 import com.msop.player.core.database.mapper.toEntity
 import com.msop.player.core.datastore.ServerConfig
 import com.msop.player.core.datastore.ServerConfigStore
@@ -91,7 +92,10 @@ class RemoteLibrarySyncer @Inject constructor(
             configs.forEach { config ->
                 val perProfile = LinkedHashMap<String, Track>()
                 val pendingDirs = ArrayDeque<String>()
-                pendingDirs.add(normalizeRoot(config.rootPath))
+                // 2026-11-17 深夜（续）用户需求「路径支持填写多条（一行一条）」：
+                // 配置里的 rootPath 按行切，每个目录都是一个扫描起点（路径本身已经是绝对路径，
+                // 所以流播 / 文件夹聚合都不用改）。
+                config.rootPaths.forEach { pendingDirs.add(it) }
                 // 2026-11-16 晚用户需求：配置页可填「请求并发数」，不填用默认 4。
                 // 按层并行：同一层的目录一起列，信号量把同时在飞的请求压到并发数以内；
                 // 单个目录仍逐页顺序翻（OpenList 的分页游标不保证乱序安全）。
@@ -179,15 +183,29 @@ class RemoteLibrarySyncer @Inject constructor(
             val (tracks, deduped) = RemoteDeduper.dedupe(raw.values)
             // 服务端列目录不给时长，时长是客户端读完文件头算出来的；
             // 重新同步不能把它清零，否则每次同步都要重新探测一遍（83 首约几十次请求）
+            // 2026-11-18（用户报「新添加服务器后歌曲封面全都不显示」）：`coverUri` 同理必须保住。
+            // 远程映射里 `coverUri` 恒为 null（服务端不产出封面，靠 `RemoteCoverExtractor`
+            // 探测后回写），整行 upsert 会把上次探测出来的路径抹掉——一次同步就让整库封面
+            // 退回占位图，只能等下次冷启动重新探测。这里跟 durationMs 一样做「空值才回填」。
             val previous = dao.bySource(SourceType.OPENLIST).associateBy { it.id }
             val merged = tracks.map { track ->
-                val kept = previous[track.id]?.durationMs ?: 0L
-                if (track.durationMs <= 0L && kept > 0L) track.copy(durationMs = kept) else track
+                val kept = previous[track.id]
+                track.copy(
+                    durationMs = if (track.durationMs <= 0L) kept?.durationMs ?: 0L else track.durationMs,
+                    coverUri = track.coverUri ?: kept?.coverUri,
+                )
             }
             val found = merged.associateBy { it.id }
             val stale = dao.idsBySource(SourceType.OPENLIST).toSet() - found.keys
+            // 2026-11-17 修复（与 WebDavLibrarySyncer 对齐）：清理幽灵条目必须同时满足
+            // ① 这次至少扫到一首（否则多半是配置/网络故障）
+            // ② 没有跳过任何目录（缺权限、挂载点异常、服务端 500 时，那个目录里的歌
+            //    根本没被列出来，按差集算就是「已删除」——一次 500 就能清掉半个曲库）
+            // ③ 没把分页安全阀踩满（MAX_PAGES 用尽时后面的目录压根没扫）
+            val pagesExhausted = pages.get() >= MAX_PAGES
+            val canClean = found.isNotEmpty() && skipped.get() == 0 && !pagesExhausted
             if (found.isNotEmpty()) {
-                if (stale.isNotEmpty()) dao.deleteByIds(stale.toList())
+                if (canClean && stale.isNotEmpty()) dao.deleteByIdsChunked(stale)
                 dao.upsertAll(found.values.map { it.toEntity() })
                 // 按 profile 分别记「已同步 N 首」，不能用总数覆盖——否则每行都显示合并后的总量
                 configs.forEach { config ->
@@ -201,7 +219,7 @@ class RemoteLibrarySyncer @Inject constructor(
             RemoteSyncStats(
                 scanned = scanned.get(),
                 tracks = found.size,
-                deleted = if (found.isEmpty()) 0 else stale.size,
+                deleted = if (canClean) stale.size else 0,
                 directories = directories.get(),
                 elapsedMs = System.currentTimeMillis() - started,
                 enriched = enriched,
@@ -257,7 +275,7 @@ class RemoteLibrarySyncer @Inject constructor(
                     else -> true
                 } && id !in keep
             }
-            if (ids.isNotEmpty()) dao.deleteByIds(ids)
+            if (ids.isNotEmpty()) dao.deleteByIdsChunked(ids)
         }
 
     /** 清除全部 OpenList 配置时一并清掉远程曲目，避免留下一堆打不开的条目。 */
@@ -266,13 +284,8 @@ class RemoteLibrarySyncer @Inject constructor(
         configStore.markSynced(0)
     }
 
-    /** 把用户填的音乐目录规整成 OpenList 的绝对路径形式，空串退回根目录。 */
-    private fun normalizeRoot(raw: String): String {
-        if (raw.isBlank()) return "/"
-        val cleaned = raw.trim().replace('\\', '/').trimEnd('/')
-        if (cleaned.isEmpty()) return "/"
-        return if (cleaned.startsWith("/")) cleaned else "/$cleaned"
-    }
+    // 2026-11-17 深夜（五）：原来的 `normalizeRoot(raw)` 在「路径支持多条」改造后已无调用点
+    // （目录归一化统一走 `ServerConfig.rootPaths` → `splitRootPaths`），这里删掉避免死代码。
 
     private companion object {
         const val PAGE_SIZE = 100

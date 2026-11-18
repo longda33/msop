@@ -1,6 +1,7 @@
 package com.msop.player.ui.icons
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -106,14 +107,66 @@ object PlayerIcons {
         }
     }
 
-    /** 歌词：四条横线（用户指定保持原样） */
+    /**
+     * 歌词（**原始形态，用户要求改回**）：四条横线（第四行短一截）。
+     *
+     * 2026-11-17 深夜（续）用户指令：底部 dock 的歌词图标、设置页里的歌词图标改回原始，
+     * 只有歌词页信息行的悬浮歌词钮用新形态 [LyricsFilled]。
+     */
     val Lyrics: ImageVector by lazy {
         icon("Lyrics") {
             stroke {
                 moveTo(4f, 6f); horizontalLineTo(20f)
-                moveTo(4f, 11f); horizontalLineTo(16f)
-                moveTo(4f, 16f); horizontalLineTo(20f)
-                moveTo(4f, 21f); horizontalLineTo(12f)
+                moveTo(4f, 10.5f); horizontalLineTo(20f)
+                moveTo(4f, 15f); horizontalLineTo(20f)
+                moveTo(4f, 19.5f); horizontalLineTo(13f)
+            }
+        }
+    }
+
+    /**
+     * 悬浮歌词钮用：**Material `Icons.Filled.Lyrics` 的原始 pathData**（手抄，不引 `material-icons-extended`）。
+     *
+     * 2026-11-17 深夜（续）用户指令：「歌词悬浮按钮图标改成和ShuYin一样」——ShuYin 用的就是
+     * `Icons.Filled.Lyrics`。形态是「聊天气泡 + 三行歌词 + 右上角音符」，实心填充，
+     * 气泡里的三行用**奇偶填充**挖空（[PathFillType.EvenOdd]，否则同一色填充会把它们盖住）。
+     */
+    val LyricsFilled: ImageVector by lazy {
+        icon("LyricsFilled") {
+            path(
+                fill = SolidColor(Color.Black),
+                pathFillType = PathFillType.EvenOdd,
+            ) {
+                // 气泡主体：圆角矩形 + 左下角尖角，右侧给音符让位
+                moveTo(14f, 9f)
+                curveTo(14f, 6.96f, 15.24f, 5.21f, 17f, 4.43f)
+                lineTo(17f, 4f)
+                curveTo(17f, 2.9f, 16.1f, 2f, 15f, 2f)
+                lineTo(4f, 2f)
+                curveTo(2.9f, 2f, 2.01f, 2.9f, 2.01f, 4f)
+                lineTo(2f, 22f)
+                lineTo(6f, 18f)
+                lineTo(15f, 18f)
+                curveTo(16.1f, 18f, 17f, 17.1f, 17f, 16f)
+                lineTo(17f, 13.58f)
+                curveTo(15.24f, 12.8f, 14f, 11.05f, 14f, 9f)
+                close()
+                // 三行歌词（挖空）
+                rect(6f, 12f, 10f, 14f)
+                rect(6f, 9f, 13f, 11f)
+                rect(6f, 6f, 13f, 8f)
+                // 右上角音符
+                moveTo(20f, 6.18f)
+                curveTo(19.69f, 6.07f, 19.35f, 6f, 19f, 6f)
+                curveTo(17.34f, 6f, 16f, 7.34f, 16f, 9f)
+                curveTo(16f, 10.66f, 17.34f, 12f, 19f, 12f)
+                curveTo(20.66f, 12f, 22f, 10.66f, 22f, 9f)
+                lineTo(22f, 3f)
+                lineTo(24f, 3f)
+                lineTo(24f, 1f)
+                lineTo(20f, 1f)
+                lineTo(20f, 6.18f)
+                close()
             }
         }
     }
@@ -369,6 +422,50 @@ object PlayerIcons {
         }
     }
 
+    /** 电源：退出确认弹窗用（顶部缺口圆环 + 一根竖线）。 */
+    val Power: ImageVector by lazy {
+        icon("Power") {
+            stroke {
+                moveTo(12f, 3.2f); verticalLineTo(11.4f)
+                moveTo(16.1f, 5.5f)
+                arcTo(
+                    horizontalEllipseRadius = 8.2f,
+                    verticalEllipseRadius = 8.2f,
+                    theta = 0f,
+                    isMoreThanHalf = true,
+                    isPositiveArc = true,
+                    x1 = 7.9f,
+                    y1 = 5.5f,
+                )
+            }
+        }
+    }
+
+    /** 全部来源：三条横线。 */
+    val AllSources: ImageVector by lazy {
+        icon("AllSources") {
+            stroke {
+                moveTo(4f, 7f); horizontalLineTo(20f)
+                moveTo(4f, 12f); horizontalLineTo(20f)
+                moveTo(4f, 17f); horizontalLineTo(20f)
+            }
+        }
+    }
+
+    /** 本机设备：手机轮廓 + 底部横条。 */
+    val Device: ImageVector by lazy {
+        icon("Device") {
+            stroke {
+                moveTo(7f, 4.2f)
+                horizontalLineTo(17f)
+                verticalLineTo(19.8f)
+                horizontalLineTo(7f)
+                close()
+                moveTo(10.6f, 17.2f); horizontalLineTo(13.4f)
+            }
+        }
+    }
+
     // ---------------------------------------------------------------- 歌词工具条（2026-11-16）
     // 三个形状全部取自 music-web-cf-main 全屏歌词工具条的 SVG（index.html 14871 行
     // 附近的 `ICON.target` / `ICON.swap` / `ICON.min`），用户要求「按钮搬过来，
@@ -416,6 +513,102 @@ object PlayerIcons {
                 moveTo(16f, 21f); verticalLineTo(18f)
                 arcTo(2f, 2f, 0f, isMoreThanHalf = false, isPositiveArc = false, x1 = 18f, y1 = 16f)
                 horizontalLineTo(21f)
+            }
+        }
+    }
+
+    // ------------------------------------------------ 设置页图标（2026-11-18 用户指令）
+
+    /**
+     * OpenList 品牌标志。
+     *
+     * 官方 logo 是「左侧开口圆环 + 中间一道斜条 + 右下折钩」，双色（青绿 + 蓝）。
+     * 这里按单色描边路径重绘：`Icon` 的颜色由调用方的 tint 决定，所以双色被压成一色。
+     * 笔画比常规图标粗（3.0，普通是 1.9）——品牌图形本身是粗体块面，细线会失真。
+     */
+    val OpenList: ImageVector by lazy {
+        icon("OpenList") {
+            stroke(width = 3.0f) {
+                // 环：从左上圆头起，绕过右上 / 右下 / 底部，收在左下偏中（官方缺口约 68°）
+                moveTo(5.2f, 7.4f)
+                arcTo(8.2f, 8.2f, 0f, isMoreThanHalf = true, isPositiveArc = true, x1 = 5.2f, y1 = 16.6f)
+                // 中间斜条（原图是蓝色那条）
+                moveTo(8.6f, 18.4f); lineTo(13.0f, 9.6f)
+                // 右下折钩
+                moveTo(16.9f, 11.6f); lineTo(13.4f, 18.6f); lineTo(15.0f, 18.6f)
+            }
+        }
+    }
+
+    /** 电池：外壳 + 正极小凸起 + 内部电量块（电池优化白名单）。 */
+    val Battery: ImageVector by lazy {
+        icon("Battery") {
+            stroke {
+                moveTo(3.4f, 8.6f)
+                horizontalLineTo(16.4f)
+                verticalLineTo(16.6f)
+                horizontalLineTo(3.4f)
+                close()
+                // 右侧正极触点
+                moveTo(16.4f, 11.0f)
+                horizontalLineTo(18.6f)
+                verticalLineTo(14.2f)
+                horizontalLineTo(16.4f)
+            }
+            solid {
+                // 电量块
+                rect(5.4f, 10.2f, 10.6f, 14.9f)
+            }
+        }
+    }
+
+    /** 硬盘：盘体 + 盘面分层线 + 右下读写指示灯（远程播放缓存）。 */
+    val HardDrive: ImageVector by lazy {
+        icon("HardDrive") {
+            stroke {
+                moveTo(3.4f, 5.6f)
+                horizontalLineTo(20.6f)
+                verticalLineTo(18.4f)
+                horizontalLineTo(3.4f)
+                close()
+                // 盘面分界：上部是盘片区，下部窄条是指示灯区
+                moveTo(4.6f, 13.6f)
+                horizontalLineTo(19.4f)
+            }
+            solid {
+                // 指示灯
+                dot(17.2f, 16.0f, 1.1f)
+            }
+        }
+    }
+
+    /** Wi‑Fi：三段同心弧 + 底部圆点（仅 Wi‑Fi 缓存）。 */
+    val Wifi: ImageVector by lazy {
+        icon("Wifi") {
+            stroke {
+                moveTo(3.4f, 15.2f)
+                arcTo(8.6f, 8.6f, 0f, isMoreThanHalf = false, isPositiveArc = true, x1 = 20.6f, y1 = 15.2f)
+                moveTo(6.6f, 15.2f)
+                arcTo(5.4f, 5.4f, 0f, isMoreThanHalf = false, isPositiveArc = true, x1 = 17.4f, y1 = 15.2f)
+                moveTo(9.8f, 15.2f)
+                arcTo(2.2f, 2.2f, 0f, isMoreThanHalf = false, isPositiveArc = true, x1 = 14.2f, y1 = 15.2f)
+            }
+            solid {
+                dot(12f, 18.6f, 1.4f)
+            }
+        }
+    }
+
+    /** i 图标：圆环 + i 字（版本号）。 */
+    val InfoCircle: ImageVector by lazy {
+        icon("InfoCircle") {
+            stroke {
+                dot(12f, 12f, 9.2f)
+                moveTo(12f, 10.8f)
+                verticalLineTo(17.0f)
+            }
+            solid {
+                dot(12f, 7.8f, 1.25f)
             }
         }
     }

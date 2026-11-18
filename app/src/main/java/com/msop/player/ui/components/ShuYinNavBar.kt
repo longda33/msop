@@ -91,6 +91,10 @@ import kotlin.math.sign
  * 视觉要点（此前反复出问题的答案都在这）：
  * - 字色是纯黑/纯白（isLightTheme ? Color.Black : Color.White），不是灰色系；
  * - 垫色浅色 0xFFFAFAFA.copy(0.55f)、深色 0xFF121212.copy(0.60f)，随主题，浅色不发黑；
+ *   2026-11-17 用户先报「窗口背景透明度太高」，当时把垫色提到 0.90/0.92 —— 结果玻璃被
+ *   糊成一块不透明的白/黑板，折射、色差、背景透光全看不见，等于把液态玻璃关掉了。
+ *   同一个参数在上游 ShuYin（`ui/LiquidGlass.kt`）是 **0.55 / 0.60**，本轮按上游还原；
+ *   垫色之上还有 `vibrancy()`（提饱和/压对比）与纯黑/纯白字色，才是可读性的来源。
  * - 圆角 30dp、高 62dp、横 padding 20dp、最大宽 520dp；blur 8/14dp + lens 24dp。
  */
 
@@ -120,10 +124,10 @@ fun LiquidGlassNavBar(
     val selectedContentColor = MaterialTheme.colorScheme.primary
     val containerColor =
         if (LiquidGlassMidEffects) {
-            // 2026-11-16 晚用户指令「导航栏窗口背景透明度太高，改成和 ShuYin 一样」：
-            // 与 MiniPlayer 同一档垫色（浅 0.72 / 深 0.74），透出背景但不糊成白片。
-            if (isLightTheme) Color(0xFFFAFAFA).copy(0.72f)
-            else Color(0xFF121212).copy(0.74f)
+            // 2026-11-17 回滚透明度：三处玻璃（导航条 / 迷你条 / 横屏歌词迷你卡）
+            // 统一回到上游 ShuYin 的浅 0.55 / 深 0.60。0.90/0.92 会把玻璃糊死。
+            if (isLightTheme) Color(0xFFFAFAFA).copy(0.55f)
+            else Color(0xFF121212).copy(0.60f)
         } else {
             MaterialTheme.colorScheme.surface
         }
@@ -335,6 +339,9 @@ fun LiquidGlassNavBar(
                         scaleX = scale
                         scaleY = scale
                     },
+                    // 2026-11-17 晚回滚：这里曾加过 2dp 静态高光，用户看过实物后否掉
+                    // （「效果难看」）——玻璃边上出现一圈描边感的亮线，不像 iOS 的玻璃。
+                    // 保持上游原样：导航条主行**没有**静态高光，高光只跟随按压进度。
                     onDrawSurface = { drawRect(containerColor) }
                 )
                 .then(interactiveHighlight.modifier)

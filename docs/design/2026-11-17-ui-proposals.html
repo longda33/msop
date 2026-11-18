@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MSOP · 定稿预览 · 启动画面 / 沙漏弹窗 / 退出弹窗</title>
+<style>
+:root{
+  --board:#F1F0F7;
+  --ink:#191828;
+  --muted:#66657E;
+  --faint:#9B9AB0;
+  --card:#FFFFFF;
+  --hair:#E5E3F0;
+  --accent:#6D5DFB;
+  --accent-soft:#EDEAFF;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+  color:var(--ink);
+  -webkit-font-smoothing:antialiased;
+  background:
+    radial-gradient(900px 520px at 10% -10%, #E4DEFF 0%, rgba(228,222,255,0) 62%),
+    radial-gradient(820px 480px at 94% 2%, #FFF3D8 0%, rgba(255,243,216,0) 58%),
+    var(--board);
+  min-height:100vh;
+}
+
+.wrap{max-width:1140px;margin:0 auto;padding:0 32px 96px}
+header{padding:60px 0 30px}
+.kicker{display:flex;align-items:center;gap:10px;font-size:11.5px;letter-spacing:.16em;color:var(--faint);text-transform:uppercase;font-weight:600}
+.kicker i{width:22px;height:1px;background:var(--faint);display:block}
+h1{font-size:38px;line-height:1.16;letter-spacing:-1.4px;margin:16px 0 12px;font-weight:750}
+h1 em{font-style:normal;background:linear-gradient(100deg,#4A38D4,#7A6BFF 48%,#14907F);-webkit-background-clip:text;background-clip:text;color:transparent}
+.lede{font-size:14px;line-height:1.85;color:var(--muted);max-width:680px;margin:0}
+.toolbar{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px;align-items:center}
+.btn-toggle{
+  border:1px solid var(--hair);background:var(--card);color:var(--ink);
+  font:inherit;font-size:12.5px;font-weight:600;padding:9px 16px;border-radius:999px;cursor:pointer;
+  display:inline-flex;align-items:center;gap:8px;
+  box-shadow:0 2px 6px rgba(25,24,40,.05);transition:.2s;
+}
+.btn-toggle:hover{border-color:#C9C3F5;box-shadow:0 6px 16px rgba(109,93,251,.14)}
+.btn-toggle .dot{width:8px;height:8px;border-radius:50%;background:#6D5DFB;box-shadow:0 0 0 3px rgba(109,93,251,.16)}
+.hint-line{font-size:12px;color:var(--faint)}
+
+.picks{display:flex;flex-wrap:wrap;gap:10px;margin-top:26px}
+.picks span{font-size:12px;font-weight:650;padding:7px 14px;border-radius:999px;background:var(--card);
+  border:1px solid var(--hair);box-shadow:0 2px 8px rgba(25,24,40,.05)}
+.picks span i{font-style:normal;color:#8C7BFF;margin-right:7px;font-weight:700}
+.picks span b{font-weight:750}
+
+section{margin-top:72px;scroll-margin-top:24px}
+.sec-head{display:flex;align-items:baseline;gap:16px;padding-bottom:16px;border-bottom:1px solid var(--hair);margin-bottom:26px}
+.sec-num{font-size:12px;font-weight:700;letter-spacing:.1em;color:var(--accent);padding:4px 9px;background:var(--accent-soft);border-radius:7px;transform:translateY(-4px)}
+.sec-head h2{font-size:22px;letter-spacing:-.6px;margin:0;font-weight:720}
+.sec-head p{margin:0;font-size:12.5px;color:var(--faint);flex:1}
+
+.spot{display:flex;gap:48px;align-items:center;padding:32px 34px;border-radius:26px;
+  background:rgba(255,255,255,.74);border:1px solid var(--hair);
+  box-shadow:0 30px 60px -46px rgba(25,20,60,.55);backdrop-filter:blur(10px)}
+.spot-meta{flex:1;min-width:0;max-width:520px}
+.spot-meta .tagrow{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.tag{font-size:10px;font-weight:700;letter-spacing:.12em;color:#7C6BFF;background:var(--accent-soft);padding:3px 8px;border-radius:6px}
+.tag.ok{color:#0E8F7C;background:#DEF5F0}
+.spot-meta h3{font-size:25px;margin:0 0 10px;letter-spacing:-.8px;font-weight:730}
+.spot-meta .desc{font-size:13px;line-height:1.9;color:var(--muted);margin:0}
+.changes{list-style:none;padding:0;margin:20px 0 0}
+.changes li{position:relative;display:flex;gap:11px;font-size:12.5px;line-height:1.75;color:#4E4D66;margin-bottom:11px}
+.changes .n{flex:none;width:19px;height:19px;border-radius:6px;background:var(--accent-soft);color:#6B58F0;
+  font-size:10.5px;font-weight:700;display:grid;place-items:center;margin-top:2px}
+.changes b{color:#221F3A;font-weight:680}
+.changes code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.5px;background:#EFEDF9;padding:1px 5px;border-radius:4px;color:#4A3FBD}
+
+.alts{margin-top:26px}
+.alts-head{display:flex;align-items:center;gap:12px;font-size:11.5px;font-weight:600;letter-spacing:.06em;color:var(--faint);margin-bottom:20px}
+.alts-head:after{content:"";flex:1;height:1px;background:var(--hair)}
+.altgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:26px}
+.altcard{display:flex;gap:20px;align-items:center;padding:18px;border-radius:20px;background:rgba(255,255,255,.5);
+  border:1px solid var(--hair);opacity:.68;filter:saturate(.75);transition:.25s;overflow:hidden}
+.altcard:hover{opacity:1;filter:none;background:rgba(255,255,255,.8)}
+.altcard .phone{transform:scale(.62);transform-origin:left center;margin:-115px -110px -115px 0}
+.altmeta{flex:1;min-width:0}
+.altmeta .tagrow{display:flex;gap:7px;margin-bottom:7px}
+.altmeta h4{font-size:14.5px;margin:0 0 6px;letter-spacing:-.3px;font-weight:700}
+.altmeta p{font-size:11.5px;line-height:1.7;color:var(--muted);margin:0}
+
+/* ============ 手机外框 ============ */
+.phone{
+  width:288px;height:604px;border-radius:42px;padding:9px;flex:none;
+  background:linear-gradient(155deg,#33323F,#15141C 42%,#2A2934);
+  box-shadow:
+    0 34px 60px -26px rgba(24,18,60,.5),
+    0 8px 20px -10px rgba(24,18,60,.28),
+    inset 0 1px 0 rgba(255,255,255,.14);
+  position:relative;
+}
+.phone:after{
+  content:"";position:absolute;inset:9px;border-radius:34px;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.08);pointer-events:none;
+}
+.screen{
+  position:relative;width:100%;height:100%;border-radius:34px;overflow:hidden;
+  background:var(--s-ink);color:var(--s-t1);isolation:isolate;
+  font-size:12px;line-height:1.4;
+
+  --s-ink:#07080D; --s-void:#040509;
+  --s-sur:#11131C; --s-sur2:#181B27; --s-sur3:#222636;
+  --s-line:#2A3042;
+  --s-blue:#6D5DFB; --s-blueL:#9A8CFF;
+  --s-teal:#4FD1C5; --s-red:#FF6B8A; --s-gold:#FFC46B;
+  --s-t1:#F6F7FC; --s-t2:#A7ADC2; --s-t3:#6A7189;
+  --s-hair:rgba(255,255,255,.09);
+  --s-fill:rgba(255,255,255,.045);
+  --s-card:linear-gradient(158deg,#1D2030,#11131C 70%);
+  --s-scrim:rgba(3,4,9,.62);
+}
+body.light-ui .screen{
+  --s-ink:#F4F2FB; --s-void:#EFEDF8;
+  --s-sur:#FDFCFF; --s-sur2:#F6F4FB; --s-sur3:#ECE9F6;
+  --s-line:#DCD9EC;
+  --s-blue:#6D5DFB; --s-blueL:#5B4BE0;
+  --s-teal:#12A594; --s-red:#E0476E; --s-gold:#C08A2E;
+  --s-t1:#20223A; --s-t2:#565B76; --s-t3:#8D92AC;
+  --s-hair:rgba(32,26,64,.12);
+  --s-fill:rgba(32,26,64,.045);
+  --s-card:linear-gradient(158deg,#FFFFFF,#F9F7FF 72%);
+  --s-scrim:rgba(28,22,60,.34);
+}
+
+.sbar{position:relative;z-index:6;height:34px;display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px;font-size:10.5px;font-weight:650;color:var(--s-t1);letter-spacing:.02em;padding-top:6px}
+.sbar .sb-r{display:flex;align-items:center;gap:4px;opacity:.8}
+.sb-r i{display:block;height:7px;border-radius:1px;background:currentColor}
+.sb-r i:nth-child(1){width:2.5px;opacity:.45}
+.sb-r i:nth-child(2){width:2.5px;opacity:.7}
+.sb-r i:nth-child(3){width:2.5px}
+.sb-r .batt{width:15px;height:7.5px;border:1px solid currentColor;border-radius:2px;position:relative;margin-left:3px;opacity:.85}
+.sb-r .batt:after{content:"";position:absolute;inset:1.2px;width:8px;background:currentColor;border-radius:1px}
+
+.aur{position:absolute;border-radius:50%;filter:blur(46px);pointer-events:none;z-index:0}
+
+/* ============ 启动画面 ============ */
+.splashA .aur.a1{width:230px;height:230px;left:-70px;top:60px;background:radial-gradient(circle,rgba(109,93,251,.55),transparent 68%);animation:drift1 11s ease-in-out infinite}
+.splashA .aur.a2{width:210px;height:210px;right:-60px;bottom:90px;background:radial-gradient(circle,rgba(255,196,107,.2),transparent 68%);animation:drift2 13s ease-in-out infinite}
+@keyframes drift1{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(16px,26px) scale(1.12)}}
+@keyframes drift2{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-14px,-22px) scale(1.08)}}
+
+.splashA .center{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;padding-bottom:24px}
+.disc-wrap{position:relative;width:124px;height:124px;display:grid;place-items:center}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.appicon-wrap{width:92px;height:92px;border-radius:50%;position:relative;
+  box-shadow:0 18px 40px -14px rgba(240,179,58,.55),0 0 26px -4px rgba(255,196,107,.28)}
+.appicon{display:block;width:100%;height:100%;shape-rendering:geometricPrecision;overflow:visible}
+.eqbar{transform-box:fill-box;transform-origin:bottom;
+  animation:barJump 1.15s cubic-bezier(.42,0,.32,1) infinite;
+  animation-delay:var(--d,0s)}
+@keyframes barJump{
+  0%,100%{transform:scaleY(var(--lo,.38))}
+  45%{transform:scaleY(1)}
+  72%{transform:scaleY(var(--mid,.7))}
+}
+
+.brandA{margin-top:28px;font-size:21px;font-weight:750;letter-spacing:.4em;text-indent:.4em;
+  color:var(--s-t1);animation:trackIn 1.5s cubic-bezier(.16,1,.3,1) .25s both}
+@keyframes trackIn{from{letter-spacing:.85em;opacity:0;filter:blur(5px)}to{letter-spacing:.4em;opacity:1;filter:blur(0)}}
+.subA{margin-top:9px;font-size:10.5px;letter-spacing:.26em;text-indent:.26em;color:var(--s-t2);animation:fadeUp 1s ease .9s both}
+@keyframes fadeUp{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+.footA{position:absolute;left:0;right:0;bottom:44px;z-index:3;display:flex;flex-direction:column;align-items:center;gap:9px}
+.barA{width:112px;height:2.5px;border-radius:2px;background:var(--s-fill);overflow:hidden}
+.barA i{display:block;height:100%;width:38%;border-radius:2px;background:linear-gradient(90deg,var(--s-blue),var(--s-blueL));
+  animation:load 2.6s cubic-bezier(.5,0,.2,1) infinite}
+@keyframes load{0%{width:6%}55%{width:62%}100%{width:100%}}
+.footA span{font-size:9.5px;color:var(--s-t3);letter-spacing:.1em}
+
+/* 备选：唱片落针 */
+.splashB{background:var(--s-void)}
+.splashB .glow{position:absolute;width:300px;height:300px;left:50%;top:44%;transform:translate(-50%,-50%);
+  background:radial-gradient(circle,rgba(109,93,251,.3),transparent 62%);filter:blur(28px);z-index:0}
+.vinyl-wrap{position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);width:216px;height:216px;z-index:2}
+.vinyl{width:100%;height:100%;border-radius:50%;position:relative;
+  background:
+    repeating-radial-gradient(circle at 50% 50%,rgba(255,255,255,.055) 0 1px,rgba(0,0,0,0) 1px 4px),
+    radial-gradient(circle at 34% 26%,#2A2B38,#101019 55%,#07070C 100%);
+  box-shadow:0 30px 60px -22px rgba(0,0,0,.95),inset 0 0 0 1px rgba(255,255,255,.07);
+  animation:spin 7s linear infinite;
+  display:grid;place-items:center;
+}
+.vinyl .label{width:78px;height:78px;border-radius:50%;display:grid;place-items:center;
+  background:conic-gradient(from 200deg,#7B6BFF,#B0A3FF 30%,#5D4EE6 60%,#4FD1C5 88%,#7B6BFF);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 0 24px rgba(109,93,251,.4)}
+.vinyl .label:after{content:"";width:9px;height:9px;border-radius:50%;background:var(--s-void);box-shadow:0 0 0 3px rgba(255,255,255,.15)}
+.tonearm{position:absolute;top:-22px;right:-14px;width:120px;height:120px;transform-origin:101px 19px;
+  animation:swing 1.35s cubic-bezier(.34,1.3,.42,1) .35s both;z-index:3}
+@keyframes swing{from{transform:rotate(-30deg)}to{transform:rotate(7deg)}}
+.tonearm .pivot{position:absolute;left:88px;top:6px;width:26px;height:26px;border-radius:50%;
+  background:radial-gradient(circle at 34% 30%,#4A4B5C,#23242F);box-shadow:0 3px 8px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.18)}
+.tonearm .arm{position:absolute;left:99.5px;top:19px;width:2.5px;height:96px;border-radius:2px;
+  background:linear-gradient(180deg,#B9BBCB,#7C7E92);transform-origin:top center;transform:rotate(38deg)}
+.tonearm .head{position:absolute;left:34px;top:90px;width:15px;height:8px;border-radius:2px;background:#C9CBD8;transform:rotate(38deg)}
+.brandB{position:absolute;left:0;right:0;bottom:112px;text-align:center;z-index:3;animation:fadeUp 1s ease 1.15s both}
+.brandB h4{margin:0;font-size:19px;font-weight:750;letter-spacing:.34em;text-indent:.34em;color:var(--s-t1)}
+.brandB p{margin:8px 0 0;font-size:9.5px;letter-spacing:.26em;color:var(--s-t3)}
+
+/* 备选：声波索引 */
+.splashC .eq{position:absolute;left:50%;top:47%;transform:translate(-50%,-50%);display:flex;align-items:center;gap:7px;height:96px;z-index:2}
+.splashC .eq i{width:7px;border-radius:99px;background:linear-gradient(180deg,var(--s-blueL),var(--s-blue));
+  transform-origin:center;animation:eqPulse 1.9s ease-in-out infinite}
+.splashC .eq i:nth-child(1){height:22px;animation-delay:0s;opacity:.4}
+.splashC .eq i:nth-child(2){height:40px;animation-delay:.1s;opacity:.6}
+.splashC .eq i:nth-child(3){height:62px;animation-delay:.2s;opacity:.8}
+.splashC .eq i:nth-child(4){height:88px;animation-delay:.3s;opacity:1;background:linear-gradient(180deg,#C4BAFF,var(--s-blue))}
+.splashC .eq i:nth-child(5){height:62px;animation-delay:.2s;opacity:.8}
+.splashC .eq i:nth-child(6){height:40px;animation-delay:.1s;opacity:.6}
+.splashC .eq i:nth-child(7){height:22px;animation-delay:0s;opacity:.4}
+@keyframes eqPulse{0%,100%{transform:scaleY(.42)}45%{transform:scaleY(1)}}
+.splashC .c-txt{position:absolute;left:0;right:0;top:calc(47% + 76px);text-align:center;z-index:2}
+.splashC .c-txt b{display:block;font-size:12.5px;font-weight:600;color:var(--s-t1);letter-spacing:.06em}
+.splashC .c-txt span{display:block;margin-top:8px;font-size:9.5px;color:var(--s-t3);letter-spacing:.12em}
+.splashC .steps{position:absolute;left:50%;transform:translateX(-50%);bottom:56px;display:flex;align-items:center;gap:6px;z-index:2}
+.splashC .steps i{width:18px;height:2px;border-radius:2px;background:var(--s-fill)}
+.splashC .steps i.on{background:linear-gradient(90deg,var(--s-blue),var(--s-blueL))}
+
+/* ============ 曲库 ============ */
+.lib-head{position:relative;z-index:2;display:flex;align-items:center;justify-content:space-between;padding:8px 18px 0}
+.lib-title{font-size:24px;font-weight:750;letter-spacing:-.9px}
+.lib-actions{display:flex;gap:8px}
+.icn-btn{width:30px;height:30px;border-radius:11px;display:grid;place-items:center;color:var(--s-t2);
+  background:var(--s-fill);border:1px solid var(--s-hair)}
+.icn-btn.on{color:var(--s-blueL);background:rgba(109,93,251,.2);border-color:rgba(154,140,255,.4)}
+.tabs{position:relative;z-index:2;display:flex;gap:15px;padding:13px 18px 9px;font-size:11px;color:var(--s-t3)}
+.tabs span{position:relative;padding-bottom:6px}
+.tabs span.on{color:var(--s-t1);font-weight:650}
+.tabs span.on:after{content:"";position:absolute;left:50%;transform:translateX(-50%);bottom:0;width:15px;height:2px;border-radius:2px;background:linear-gradient(90deg,var(--s-blue),var(--s-blueL))}
+.rows{position:relative;z-index:1;padding:2px 12px 0}
+.row{display:flex;align-items:center;gap:10px;padding:7px 6px;border-radius:12px}
+.cov{width:36px;height:36px;border-radius:9px;flex:none;box-shadow:0 4px 10px -4px rgba(0,0,0,.6)}
+.c1{background:linear-gradient(140deg,#7B6BFF,#3E2FA8)}
+.c2{background:linear-gradient(140deg,#4FD1C5,#1C6E72)}
+.c3{background:linear-gradient(140deg,#FFC46B,#B06A2A)}
+.c4{background:linear-gradient(140deg,#FF6B8A,#8E2A46)}
+.c5{background:linear-gradient(140deg,#8FA2FF,#2C3E8E)}
+.rt{flex:1;min-width:0}
+.rt b{display:block;font-size:11.5px;font-weight:600;color:var(--s-t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rt span{display:block;font-size:9.5px;color:var(--s-t3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dur{font-size:9.5px;color:var(--s-t3)}
+
+.scrim{position:absolute;inset:0;z-index:8;background:var(--s-scrim);animation:fadeIn .3s ease both}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+/* 定稿：锚定气泡 */
+.popscrim{position:absolute;inset:0;z-index:8;background:var(--s-scrim);opacity:.5;animation:fadeIn .3s ease both}
+.pop{position:absolute;right:14px;top:80px;z-index:9;width:188px;padding:5px;border-radius:16px;
+  background:var(--s-sur2);border:1px solid var(--s-hair);
+  box-shadow:0 22px 44px -14px rgba(0,0,0,.75),inset 0 1px 0 rgba(255,255,255,.06);
+  animation:popIn .34s cubic-bezier(.16,1,.3,1) both;transform-origin:top right}
+@keyframes popIn{from{opacity:0;transform:scale(.86) translateY(-6px)}to{opacity:1;transform:none}}
+.pop:before{content:"";position:absolute;top:-5.5px;right:52px;width:10px;height:10px;transform:rotate(45deg);
+  background:var(--s-sur2);border-left:1px solid var(--s-hair);border-top:1px solid var(--s-hair);border-radius:2px 0 0 0}
+.pop-row{display:flex;align-items:center;gap:8px;padding:8px 9px;border-radius:11px;font-size:10.5px;color:var(--s-t2)}
+.pop-row b{font-weight:550;flex:1;color:var(--s-t1)}
+.pop-row .num{font-size:9.5px;color:var(--s-t3)}
+.pop-row.on{background:rgba(109,93,251,.16);box-shadow:inset 2.5px 0 0 var(--s-blueL)}
+.pop-row.on b,.pop-row.on .num{color:var(--s-blueL)}
+.pop-sep{height:1px;background:var(--s-hair);margin:3px 8px}
+
+/* 备选：底部浮卡 */
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:9;padding:9px 16px 20px;
+  border-radius:26px 26px 0 0;background:var(--s-card);border-top:1px solid var(--s-hair);
+  box-shadow:0 -26px 50px -18px rgba(0,0,0,.7);
+  animation:sheetUp .52s cubic-bezier(.16,1,.3,1) both}
+@keyframes sheetUp{from{transform:translateY(101%)}to{transform:none}}
+.handle{width:34px;height:3.5px;border-radius:3px;background:var(--s-line);margin:0 auto 13px}
+.sh-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.sh-head b{font-size:13.5px;font-weight:700;letter-spacing:-.2px}
+.sh-head .x{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;color:var(--s-t3);background:var(--s-fill);font-size:12px}
+.opt{display:flex;align-items:center;gap:11px;padding:10px 11px;margin-top:8px;border-radius:14px;
+  border:1px solid var(--s-hair);background:var(--s-fill)}
+.opt .oi{width:32px;height:32px;border-radius:11px;display:grid;place-items:center;background:var(--s-sur3);color:var(--s-t2);flex:none}
+.opt .ot{flex:1}
+.opt .ot b{display:block;font-size:11.5px;font-weight:600}
+.opt .ot span{display:block;font-size:9.5px;color:var(--s-t3);margin-top:2px}
+.opt .num{font-size:10px;color:var(--s-t3);font-variant-numeric:tabular-nums}
+.opt.on{border-color:rgba(154,140,255,.55);background:linear-gradient(100deg,rgba(109,93,251,.22),rgba(109,93,251,.08))}
+.opt.on .oi{background:linear-gradient(140deg,var(--s-blue),var(--s-blueL));color:#fff}
+.opt.on .num{color:var(--s-blueL)}
+.tick{width:16px;height:16px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(140deg,var(--s-blue),var(--s-blueL));color:#fff;font-size:9px;flex:none}
+
+/* 备选：分段器 */
+.segwrap{position:relative;z-index:2;padding:0 16px;animation:segIn .45s cubic-bezier(.16,1,.3,1) both}
+@keyframes segIn{from{opacity:0;transform:translateY(-9px)}to{opacity:1;transform:none}}
+.seg{display:flex;position:relative;padding:3px;border-radius:999px;background:var(--s-sur2);border:1px solid var(--s-hair)}
+.seg .thumb{position:absolute;top:3px;bottom:3px;left:3px;width:calc((100% - 6px)/3);border-radius:999px;
+  background:linear-gradient(135deg,var(--s-blue),var(--s-blueL));box-shadow:0 4px 12px -3px rgba(109,93,251,.8);
+  transform:translateX(100%);transition:transform .38s cubic-bezier(.34,1.3,.5,1)}
+.seg span{flex:1;text-align:center;font-size:10px;padding:6px 0;position:relative;z-index:2;color:var(--s-t2);font-weight:550}
+.seg span.on{color:#fff;font-weight:650}
+.segmeta{display:flex;justify-content:space-between;align-items:center;margin-top:9px;font-size:9.5px;color:var(--s-t3)}
+.segmeta b{color:var(--s-t2);font-weight:600;font-variant-numeric:tabular-nums}
+.segmeta .clear{color:var(--s-blueL)}
+
+/* ============ 播放页 ============ */
+.ply .bg{position:absolute;inset:0;z-index:0;
+  background:
+    radial-gradient(120% 70% at 50% 0%,rgba(109,93,251,.5),transparent 62%),
+    radial-gradient(90% 60% at 20% 100%,rgba(79,209,197,.22),transparent 60%),
+    linear-gradient(180deg,#0D0E16,#05060B)}
+body.light-ui .ply .bg{background:
+    radial-gradient(120% 70% at 50% 0%,rgba(154,140,255,.55),transparent 62%),
+    radial-gradient(90% 60% at 20% 100%,rgba(79,209,197,.3),transparent 60%),
+    linear-gradient(180deg,#F6F4FF,#EDEAF8)}
+.ply .cover{position:absolute;left:50%;top:118px;transform:translateX(-50%);width:168px;height:168px;border-radius:22px;z-index:1;
+  background:linear-gradient(150deg,#7B6BFF,#4A3AB8 48%,#241C58);
+  box-shadow:0 30px 54px -20px rgba(0,0,0,.85),inset 0 1px 0 rgba(255,255,255,.25)}
+.ply .cover:after{content:"";position:absolute;inset:0;border-radius:22px;
+  background:radial-gradient(70% 50% at 30% 20%,rgba(255,255,255,.28),transparent 60%)}
+.ply .ttl{position:absolute;left:0;right:0;top:308px;text-align:center;z-index:2;font-size:15px;font-weight:700;letter-spacing:-.3px}
+.ply .art{position:absolute;left:0;right:0;top:332px;text-align:center;z-index:2;font-size:10.5px;color:var(--s-t2)}
+.ply .ctrls{position:absolute;left:0;right:0;bottom:52px;display:flex;align-items:center;justify-content:center;gap:26px;z-index:2;color:var(--s-t1)}
+.ply .ctrls .p{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;
+  background:linear-gradient(140deg,var(--s-blue),var(--s-blueL));box-shadow:0 10px 22px -8px rgba(109,93,251,.9)}
+.ply .ctrls .s{opacity:.75}
+
+/* 定稿：玻璃确认卡 */
+.dlg{position:absolute;z-index:10;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:232px;border-radius:26px;padding:22px 18px 18px;text-align:center;
+  background:var(--s-card);border:1px solid var(--s-hair);
+  box-shadow:0 40px 70px -22px rgba(0,0,0,.85),inset 0 1px 0 rgba(255,255,255,.08);
+  animation:dlgIn .46s cubic-bezier(.16,1,.3,1) both}
+@keyframes dlgIn{from{opacity:0;transform:translate(-50%,-46%) scale(.93)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+.dlg .ico{width:52px;height:52px;border-radius:50%;margin:0 auto 14px;display:grid;place-items:center;
+  background:radial-gradient(circle at 34% 28%,rgba(255,107,138,.28),rgba(255,107,138,.1));
+  border:1px solid rgba(255,107,138,.28);color:var(--s-red)}
+.dlg h5{margin:0;font-size:15.5px;font-weight:720;letter-spacing:-.3px}
+.dlg .btns{display:flex;gap:9px;margin-top:20px}
+.dlg .btn{flex:1;height:38px;border-radius:999px;display:grid;place-items:center;font-size:11.5px;font-weight:650}
+.btn.pri{background:linear-gradient(135deg,var(--s-blue),var(--s-blueL));color:#fff;
+  box-shadow:0 10px 20px -8px rgba(109,93,251,.9)}
+.btn.danger{color:var(--s-red);background:rgba(255,107,138,.1);border:1px solid rgba(255,107,138,.3)}
+.btn.quiet{color:var(--s-t2);background:var(--s-fill);border:1px solid var(--s-hair)}
+
+/* 备选：动作表 */
+.acts{position:absolute;left:0;right:0;bottom:0;z-index:10;padding:9px 14px 18px;border-radius:26px 26px 0 0;
+  background:var(--s-card);border-top:1px solid var(--s-hair);box-shadow:0 -26px 50px -18px rgba(0,0,0,.7);
+  animation:sheetUp .5s cubic-bezier(.16,1,.3,1) both}
+.acts h5{margin:4px 0 0;font-size:14px;font-weight:720;letter-spacing:-.2px;padding:0 4px}
+.acts p{margin:6px 0 12px;font-size:10px;color:var(--s-t3);padding:0 4px;line-height:1.6}
+.act{display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:14px;background:var(--s-fill);
+  border:1px solid var(--s-hair);margin-bottom:8px;font-size:11.5px;font-weight:600}
+.act .ai{width:28px;height:28px;border-radius:9px;display:grid;place-items:center;background:var(--s-sur3);color:var(--s-t2);flex:none}
+.act.danger{color:var(--s-red);border-color:rgba(255,107,138,.26);background:rgba(255,107,138,.08)}
+.act.danger .ai{background:rgba(255,107,138,.16);color:var(--s-red)}
+.act .ch{margin-left:auto;color:var(--s-t3);opacity:.7;font-size:12px}
+.acts .cancel{margin-top:4px;height:38px;border-radius:999px;display:grid;place-items:center;
+  font-size:11.5px;font-weight:650;color:var(--s-t2);background:var(--s-fill);border:1px solid var(--s-hair)}
+
+/* 备选：极简卡 */
+.dlg.mini{width:200px;padding:18px 16px 14px}
+.dlg.mini h5{font-size:14px}
+.dlg.mini p{margin-top:6px;font-size:10px;color:var(--s-t2)}
+.dlg.mini .btns{margin-top:15px;gap:8px}
+.dlg.mini .btn{height:34px;font-size:11px}
+
+/* ============ 落地清单 ============ */
+.done{margin-top:16px;background:linear-gradient(140deg,#171532,#0E0D1C 62%);border-radius:24px;padding:32px 34px;color:#EDEBFA;
+  box-shadow:0 30px 60px -34px rgba(24,18,60,.9);position:relative;overflow:hidden}
+.done:before{content:"";position:absolute;width:360px;height:360px;right:-100px;top:-150px;border-radius:50%;
+  background:radial-gradient(circle,rgba(109,93,251,.42),transparent 66%);filter:blur(14px)}
+.done:after{content:"";position:absolute;width:300px;height:300px;left:-120px;bottom:-180px;border-radius:50%;
+  background:radial-gradient(circle,rgba(255,196,107,.22),transparent 66%);filter:blur(14px)}
+.done h3{margin:0 0 18px;font-size:17px;letter-spacing:-.3px;position:relative}
+.files{position:relative;display:grid;grid-template-columns:repeat(2,1fr);gap:14px 26px}
+.files div{display:flex;gap:11px;font-size:12px;line-height:1.7;color:#B6B2D2}
+.files code{flex:none;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.5px;
+  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);padding:2px 7px;border-radius:6px;
+  color:#C9C3FF;height:fit-content;margin-top:2px;white-space:nowrap}
+.files b{color:#EDEBFA;font-weight:650}
+.note{margin-top:26px;border-left:2px solid #C9C3F5;padding:2px 0 2px 16px;font-size:12px;line-height:1.85;color:var(--muted);max-width:900px}
+.note b{color:var(--ink)}
+.note code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.5px;background:#EFEDF9;padding:1px 5px;border-radius:4px;color:#4A3FBD}
+
+footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--hair);font-size:11px;color:var(--faint);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+
+@media (max-width:980px){
+  .spot{flex-direction:column;gap:30px;align-items:flex-start}
+  .spot-meta{max-width:none}
+  .altgrid{grid-template-columns:1fr}
+  .files{grid-template-columns:1fr}
+}
+@media (max-width:720px){
+  .wrap{padding:0 20px 70px}
+  h1{font-size:30px}
+  .sec-head{flex-wrap:wrap;gap:8px}
+  .sec-head p{flex-basis:100%}
+  .spot{padding:22px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker"><i></i>MSOP · 定稿预览 · 2026-11-17</div>
+  <h1>三个界面，<em>已定稿</em></h1>
+  <p class="lede">
+    启动画面 A（换应用图标 + 中柱跳动）、沙漏弹窗 B（锚定气泡）、退出弹窗 A（去掉副文案）。
+    下面三台是最终形态，未选用的六套收在每节下方留档。右上角可切深色／浅色。
+  </p>
+  <div class="toolbar">
+    <button class="btn-toggle" id="themeBtn"><span class="dot"></span><span id="themeTxt">当前预览：深色</span></button>
+    <span class="hint-line">界面内动画为真实循环演示</span>
+  </div>
+  <div class="picks">
+    <span><i>01</i>启动 · <b>极光呼吸</b></span>
+    <span><i>02</i>沙漏 · <b>锚定气泡</b></span>
+    <span><i>03</i>退出 · <b>玻璃确认卡</b></span>
+  </div>
+</header>
+
+<!-- ================= 01 ================= -->
+<section id="splash">
+  <div class="sec-head">
+    <span class="sec-num">01</span>
+    <h2>启动画面</h2>
+    <p>LOGO 换成应用图标 · 中间竖线跳动 · 副标题改为「私人音乐库」</p>
+  </div>
+
+  <div class="spot">
+    <div class="phone"><div class="screen splashA">
+      <div class="aur a1"></div><div class="aur a2"></div>
+      <div class="sbar"><span>9:41</span><span class="sb-r"><i></i><i></i><i></i><span class="batt"></span></span></div>
+      <div class="center">
+        <div class="disc-wrap">
+          <div class="appicon-wrap">
+            <svg class="appicon" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="bgG" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stop-color="#FFE89F"/><stop offset=".55" stop-color="#F8C54B"/><stop offset="1" stop-color="#F0B33A"/>
+                </linearGradient>
+                <linearGradient id="fgG" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0" stop-color="#EA5F98"/><stop offset=".5" stop-color="#A969BD"/><stop offset="1" stop-color="#5B77EA"/>
+                </linearGradient>
+              </defs>
+              <circle cx="50" cy="50" r="49.7" fill="url(#bgG)"/>
+              <path d="M21.9 53.9 A27.9 27.9 0 0 1 77.7 53.9 L70.1 53.9 A20.3 20.3 0 0 0 29.5 53.9 Z" fill="url(#fgG)"/>
+              <rect x="19.5" y="52" width="11" height="18.5" rx="5.5" fill="url(#fgG)"/>
+              <rect x="69.1" y="52" width="11" height="18.5" rx="5.5" fill="url(#fgG)"/>
+              <rect class="eqbar" style="--lo:.34;--mid:.6;--d:0s" x="36.65" y="54.3" width="5.9" height="16" rx="2.95" fill="url(#fgG)"/>
+              <rect class="eqbar" style="--lo:.4;--mid:.74;--d:.19s" x="46.85" y="46.3" width="5.9" height="24" rx="2.95" fill="url(#fgG)"/>
+              <rect class="eqbar" style="--lo:.3;--mid:.55;--d:.38s" x="57.05" y="51.3" width="5.9" height="19" rx="2.95" fill="url(#fgG)"/>
+            </svg>
+          </div>
+        </div>
+        <div class="brandA">MSOP</div>
+        <div class="subA">私 人 音 乐 库</div>
+      </div>
+      <div class="footA"><div class="barA"><i></i></div><span>正在载入曲库</span></div>
+    </div></div>
+
+    <div class="spot-meta">
+      <div class="tagrow"><span class="tag">定稿</span><span class="tag ok">方案 A · 极光呼吸</span></div>
+      <h3>极光呼吸</h3>
+      <p class="desc">深空墨底上两团极光缓慢漂移，中央是应用图标本身，<b>固定 92dp 不做缩放</b>；图标里三根竖线错峰跳动，像一段没有声音的波形。</p>
+      <ul class="changes">
+        <li><span class="n">1</span><span><b>LOGO 换成应用图标</b>：按 <code>msop_icon.png</code> 的实际几何重画成矢量——黄橙渐变圆 + 粉蓝渐变的耳机 + 三根均衡器竖条。矢量版放大不糊，也能单独动某一根柱子。</span></li>
+        <li><span class="n">2</span><span><b>三根竖线都跳动</b>：三根都以底边为轴做 <code>scaleY</code>，收缩幅度 0.30 / 0.40 / 0.34 各不同，延迟 0 / .19s / .38s 依次错开，读起来是一段波形，而不是三根一起抽搐。</span></li>
+        <li><span class="n">3</span><span><b>去掉旋转外圈</b>：原来那圈 9s 转一圈的暖金光环整圈删除，画面只剩极光和跳动的竖线，更安静、也不和图标本身的圆边抢戏。</span></li>
+        <li><span class="n">4</span><span><b>图标固定尺寸</b>：整枚图标不做呼吸缩放，稳定停在 92dp，不会有「忽大忽小」的廉价感。</span></li>
+        <li><span class="n">5</span><span><b>副标题</b>「私人唱片架」→「<b>私人音乐库</b>」，字距 .26em，与主标题的 .4em 拉开层级。</span></li>
+        <li><span class="n">6</span><span>保留底部细进度条与「正在载入曲库」，冷启动慢时不显空。</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="alts">
+    <div class="alts-head">未选用 · 留档</div>
+    <div class="altgrid">
+
+      <div class="altcard">
+        <div class="phone"><div class="screen splashB">
+          <div class="glow"></div>
+          <div class="sbar"><span>9:41</span><span class="sb-r"><i></i><i></i><i></i><span class="batt"></span></span></div>
+          <div class="vinyl-wrap">
+            <div class="vinyl"><div class="label"></div></div>
+            <div class="tonearm"><div class="arm"></div><div class="head"></div><div class="pivot"></div></div>
+          </div>
+          <div class="brandB"><h4>MSOP</h4><p>私 人 音 乐 库</p></div>
+        </div></div>
+        <div class="altmeta">
+          <div class="tagrow"><span class="tag">B</span></div>
+          <h4>唱片落针</h4>
+          <p>黑胶 + 唱臂落针，仪式感最强；但 1.2s 演完，冷启动慢时会「演完空等」。</p>
+        </div>
+      </div>
+
+      <div class="altcard">
+        <div class="phone"><div class="screen splashC">
+          <div class="sbar"><span>9:41</span><span class="sb-r"><i></i><i></i><i></i><span class="batt"></span></span></div>
+          <div class="eq"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <div class="c-txt"><b>正在整理曲库…</b><span>已索引 1 280 首</span></div>
+          <div class="steps"><i class="on"></i><i class="on"></i><i></i></div>
+        </div></div>
+        <div class="altmeta">
+          <div class="tagrow"><span class="tag">C</span></div>
+          <h4>声波索引</h4>
+          <p>七根竖条依次点亮，把首次扫描的等待做成叙事；但最「技术」，品牌温度最弱。</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ================= 02 ================= -->
+<section id="filter">
+  <div class="sec-head">
+    <span class="sec-num">02</span>
+    <h2>音乐库「沙漏」筛选弹窗</h2>
+    <p>锚定气泡：紧贴触发按钮，三行 + 条数 + 左侧紫竖条</p>
+  </div>
+
+  <div class="spot">
+    <div class="phone"><div class="screen">
+      <div class="sbar"><span>9:41</span><span class="sb-r"><i></i><i></i><i></i><span class="batt"></span></span></div>
+      <div class="lib-head">
+        <div class="lib-title">音乐库</div>
+        <div class="lib-actions">
+          <div class="icn-btn on"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6.5 3h11M6.5 21h11M8.2 3v3.1c0 1.7 3.8 3.3 3.8 5.9s-3.8 4.2-3.8 5.9V21M15.8 3v3.1c0 1.7-3.8 3.3-3.8 5.9s3.8 4.2 3.8 5.9V21"/></svg></div>
+          <div class="icn-btn">⋯</div>
+        </div>
+      </div>
+      <div class="tabs"><span class="on">歌曲</span><span>歌手</span><span>专辑</span><span>歌单</span><span>文件夹</span></div>
+      <div class="rows">
+        <div class="row"><div class="cov c2"></div><div class="rt"><b>雨落三千里</b><span>李知远 · 云端</span></div><div class="dur">3:48</div></div>
+        <div class="row"><div class="cov c4"></div><div class="rt"><b>无人区玫瑰</b><span>林述 · 云端</span></div><div class="dur">4:26</div></div>
+        <div class="row"><div class="cov c1"></div><div class="rt"><b>夜航西飞</b><span>陈鸿宇 · 本机</span></div><div class="dur">4:12</div></div>
+        <div class="row"><div class="cov c5"></div><div class="rt"><b>午夜电台</b><span>North · 本机</span></div><div class="dur">3:15</div></div>
+        <div class="row"><div class="cov c3"></div><div class="rt"><b>旧磁带</b><span>海边乐队 · 本机</span></div><div class="dur">5:02</div></div>
+      </div>
+      <div class="popscrim"></div>
+      <div class="pop">
+        <div class="pop-row on">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+          <b>全部来源</b><span class="num">1 280</span>
+        </div>
+        <div class="pop-sep"></div>
+        <div class="pop-row">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="4" y="4" width="16" height="12" rx="2"/><path d="M9 20h6"/></svg>
+          <b>只看本机</b><span class="num">940</span>
+        </div>
+        <div class="pop-row">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M7 17a4.5 4.5 0 0 1-.4-8.98A6 6 0 0 1 18 9.5a3.75 3.75 0 0 1-.5 7.5H7Z"/></svg>
+          <b>只看云端</b><span class="num">340</span>
+        </div>
+      </div>
+    </div></div>
+
+    <div class="spot-meta">
+      <div class="tagrow"><span class="tag">定稿</span><span class="tag ok">方案 B · 锚定气泡</span></div>
+      <h3>锚定气泡</h3>
+      <p class="desc">从右上角沙漏按钮正下方弹出，小三角指回触发点；三行列表，右侧显示条数，选中行左侧一道紫竖条。</p>
+      <ul class="changes">
+        <li><span class="n">1</span><span><b>空间关系清楚</b>：谁点出来的、点的是什么，一眼看得见，比整屏 sheet 更轻。</span></li>
+        <li><span class="n">2</span><span><b>加了一层 50% 蒙层</b>：气泡是浮层，不加蒙层直接压住标签栏会像布局错位；点蒙层任意处即关闭。</span></li>
+        <li><span class="n">3</span><span><b>选中态三处冗余</b>：紫底 + 左侧 2.5dp 竖条 + 数字变紫，保证深色和浅色下都看得出当前是哪一档。</span></li>
+        <li><span class="n">4</span><span><b>条数前置</b>：选之前就知道会剩多少首，避免选完才发现是空的。</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="alts">
+    <div class="alts-head">未选用 · 留档</div>
+    <div class="altgrid">
+
+      <div class="altcard">
+        <div class="phone"><div class="screen">
+          <div class="sbar"><span>9:41</span><span class="sb-r"><i></i><i></i><i></i><span class="batt"></span></span></div>
+          <div class="lib-head">
+            <div class="lib-title">音乐库</div>
+            <div class="lib-actions">
+              <div class="icn-btn on"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6.5 3h11M6.5 21h11M8.2 3v3.1c0 1.7 3.8 3.3 3.8 5.9s-3.8 4.2-3.8 5.9V21M15.8 3v3.1c0 1.7-3.8 3.3-3.8 5.9s3.8 4.2 3.8 5.9V21"/></svg></div>
+              <div class="icn-btn">⋯</div>
+            </div>
+          </div>
+          <div class="tabs"><span class="on">歌曲</span><span>歌手</span><span>专辑</span><span>歌单</span><span>文件夹</span></div>
+          <div class="rows">
+            <div class="row"><div class="cov c1"></div><div class="rt"><b>夜航西飞</b><span>陈鸿宇 · 本机</span></div><div class="dur">4:12</div></div>
+            <div class="row"><div class="cov c2"></div><div class="rt"><b>雨落三千里</b><span>李知远 · 云端</span></div><div class="dur">3:48</div></div>
+            <div class="row"><div class="cov c3"></div><div class="rt"><b>旧磁带</b><span>海边乐队 · 本机</span></div><div class="dur">5:02</div></div>
+            <div class="row"><div class="cov c4"></div><div class="rt"><b>无人区玫瑰</b><span>林述 · 云端</span></div><div class="dur">4:26</div></div>
+          </div>
+          <div class="scrim"></div>
+          <div class="sheet">
+            <div class="handle"></div>
+            <div class="sh-head"><b>筛选来源</b><div class="x">✕</div></div>
+            <div class="opt on">
+              <div class="oi"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></div>
+              <div class="ot"><b>全部来源</b><span>本机与云端一起显示</span></div>
+              <div class="num">1 280</div><div class="tick">✓</div>
+            </div>
+            <div class="opt">
+              <div class="oi"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="4" width="16" height="12" rx="2"/><path d="M9 20h6M12 16v4"/></svg></div>
+              <div class="ot"><b>只看本机</b><span>设备内已下载的曲目</span></div>
+              <div class="num">940</div>
+            </div>
+            <div class="opt">
+              <div class="oi"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M7 17a4.5 4.5 0 0 1-.4-8.98A6 6 0 0 1 18 9.5a3.75 3.75 0 0 1-.5 7.5H7Z"/></svg></div>
+              <div class="ot"><b>只看云端</b><span>OpenList / WebDAV</span></div>
+              <div class="num">340</div>
+            </div>
+          </div>
+        </div></div>
+        <div class="altmeta">
+          <div class="tagrow"><span class="tag">A</span></div>
+          <h4>底部浮卡</h4>
+          <p>拇指区可达、说明最全，但要拉一整屏蒙层，比气泡重一档。</p>
+        </div>
+      </div>
+
+      <div class="altcard">
+        <div class="phone"><div class="screen">
+          <div class="sbar"><span>9:41</span><span class="sb-r"><i></i><i></i><i></i><span class="batt"></span></span></div>
+          <div class="lib-head">
+            <div class="lib-title">音乐库</div>
+            <div class="lib-actions">
+              <div class="icn-btn on"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6.5 3h11M6.5 21h11M8.2 3v3.1c0 1.7 3.8 3.3 3.8 5.9s-3.8 4.2-3.8 5.9V21M15.8 3v3.1c0 1.7-3.8 3.3-3.8 5.9s3.8 4.2 3.8 5.9V21"/></svg></div>
+              <div class="icn-btn">⋯</div>
+            </div>
+          </div>
+          <div class="segwrap">
+            <div class="seg">
+              <div class="thumb"></div>
+              <span>全部</span><span class="on">本机</span><span>云端</span>
+            </div>
+            <div class="segmeta"><span>本机 940 首 · 共 1 280</span><span class="clear">恢复全部</span></div>
+          </div>
+          <div class="tabs"><span class="on">歌曲</span><span>歌手</span><span>专辑</span><span>歌单</span><span>文件夹</span></div>
+          <div class="rows">
+            <div class="row"><div class="cov c1"></div><div class="rt"><b>夜航西飞</b><span>陈鸿宇 · 本机</span></div><div class="dur">4:12</div></div>
+            <div class="row"><div class="cov c3"></div><div class="rt"><b>旧磁带</b><span>海边乐队 · 本机</span></div><div class="dur">5:02</div></div>
+            <div class="row"><div class="cov c5"></div><div class="rt"><b>午夜电台</b><span>North · 本机</span></div><div class="dur">3:15</div></div>
+            <div class="row"><div class="cov c2"></div><div class="rt"><b>风起时</b><span>李知远 · 本机</span></div><div class="dur">4:38</div></div>
+          </div>
+        </div></div>
+        <div class="altmeta">
+          <div class="tagrow"><span class="tag">C</span></div>
+          <h4>标题内联分段器</h4>
+          <p>状态常驻、零遮挡，但永久占掉一行高度（约 44dp）。</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ================= 03 ================= -->
+<section id="exit">
+  <div class="sec-head">
+    <span class="sec-num">03</span>
+    <h2>退出确认弹窗</h2>
+    <p>只留图标 + 标题 + 两个按钮，副文案已删除</p>
+  </div>
+
+  <div class="spot">
+    <div class="phone"><div class="screen ply">
+      <div class="bg"></div>
+      <div class="sbar"><span>9:41</span><span class="sb-r"><i></i><i></i><i></i><span class="batt"></span></span></div>
+      <div class="cover"></div>
+      <div class="ttl">夜航西飞</div>
+      <div class="art">陈鸿宇 · 额尔古纳</div>
+      <div class="ctrls">
+        <svg class="s" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h2v14H7zM19 5v14l-9-7z"/></svg>
+        <div class="p"><svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg></div>
+        <svg class="s" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M15 5h2v14h-2zM5 5l9 7-9 7z"/></svg>
+      </div>
+      <div class="scrim"></div>
+      <div class="dlg">
+        <div class="ico">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3v9"/><path d="M6.5 6.8a8 8 0 1 0 11 0"/>
+          </svg>
+        </div>
+        <h5>要退出 MSOP 吗？</h5>
+        <div class="btns"><div class="btn pri">继续听</div><div class="btn danger">退出</div></div>
+      </div>
+    </div></div>
+
+    <div class="spot-meta">
+      <div class="tagrow"><span class="tag">定稿</span><span class="tag ok">方案 A · 玻璃确认卡</span></div>
+      <h3>玻璃确认卡</h3>
+      <p class="desc">居中玻璃卡，只剩一枚图标、一句问句和两个按钮，卡片高度从约 220dp 收到 168dp。</p>
+      <ul class="changes">
+        <li><span class="n">1</span><span><b>删掉副文案</b>：原来那句「退出后会停止播放，睡眠定时器也会一并关闭」整行移除，不再解释后果，只做确认。</span></li>
+        <li><span class="n">2</span><span><b>按钮上间距加到 20dp</b>：少了文字后卡片变矮，靠间距而不是靠说明文字撑住呼吸感。</span></li>
+        <li><span class="n">3</span><span><b>主次仍然分明</b>：左「继续听」紫渐变实心是默认动作，右「退出」只留红字，误触成本低。</span></li>
+        <li><span class="n">4</span><span>点卡片外或按返回键 = 继续听，只有明确点右侧才退出。</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="alts">
+    <div class="alts-head">未选用 · 留档</div>
+    <div class="altgrid">
+
+      <div class="altcard">
+        <div class="phone"><div class="screen ply">
+          <div class="bg"></div>
+          <div class="sbar"><span>9:41</span><span class="sb-r"><i></i><i></i><i></i><span class="batt"></span></span></div>
+          <div class="cover"></div>
+          <div class="ttl">夜航西飞</div>
+          <div class="art">陈鸿宇 · 额尔古纳</div>
+          <div class="ctrls">
+            <svg class="s" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h2v14H7zM19 5v14l-9-7z"/></svg>
+            <div class="p"><svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg></div>
+            <svg class="s" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M15 5h2v14h-2zM5 5l9 7-9 7z"/></svg>
+          </div>
+          <div class="scrim"></div>
+          <div class="acts">
+            <div class="handle"></div>
+            <h5>退出 MSOP</h5>
+            <p>退出会停止播放并关闭睡眠定时器。</p>
+            <div class="act">
+              <div class="ai"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M8 5v14l11-7z"/></svg></div>
+              继续播放<span class="ch">›</span>
+            </div>
+            <div class="act danger">
+              <div class="ai"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v9"/><path d="M6.5 6.8a8 8 0 1 0 11 0"/></svg></div>
+              退出应用<span class="ch">›</span>
+            </div>
+            <div class="cancel">取消</div>
+          </div>
+        </div></div>
+        <div class="altmeta">
+          <div class="tagrow"><span class="tag">B</span></div>
+          <h4>底部动作表</h4>
+          <p>单手最顺，但对「退出」这种低频动作层级偏多、占地偏大。</p>
+        </div>
+      </div>
+
+      <div class="altcard">
+        <div class="phone"><div class="screen ply">
+          <div class="bg"></div>
+          <div class="sbar"><span>9:41</span><span class="sb-r"><i></i><i></i><i></i><span class="batt"></span></span></div>
+          <div class="cover"></div>
+          <div class="ttl">夜航西飞</div>
+          <div class="art">陈鸿宇 · 额尔古纳</div>
+          <div class="ctrls">
+            <svg class="s" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h2v14H7zM19 5v14l-9-7z"/></svg>
+            <div class="p"><svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg></div>
+            <svg class="s" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M15 5h2v14h-2zM5 5l9 7-9 7z"/></svg>
+          </div>
+          <div class="scrim"></div>
+          <div class="dlg mini">
+            <h5>退出 MSOP？</h5>
+            <p>播放会停止</p>
+            <div class="btns"><div class="btn quiet">取消</div><div class="btn danger">退出</div></div>
+          </div>
+        </div></div>
+        <div class="altmeta">
+          <div class="tagrow"><span class="tag">C</span></div>
+          <h4>极简一问</h4>
+          <p>最快最安静，但没有图标撑场面，和定稿版只差一枚图标。</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ================= 落地 ================= -->
+<section>
+  <div class="done">
+    <h3>落地清单 · 我会按这个顺序写代码</h3>
+    <div class="files">
+      <div><code>SplashScreen.kt</code><span>新建。<b>InfiniteTransition</b> 驱动图标呼吸与中柱 <code>scaleY</code>，图标用矢量 <code>drawable/ic_msop_logo.xml</code>，副标题「私人音乐库」。</span></div>
+      <div><code>MainActivity.kt</code><span><b>installSplashScreen()</b> 接管系统启动图，<code>windowBackground</code> 对齐 <code>#07080D</code>，避免「双启动图」跳变。</span></div>
+      <div><code>LibraryScreen.kt</code><span>把 <b>DropdownMenu</b> 换成 <code>Popup(alignment = TopEnd)</code> 气泡，补 50% 蒙层与三档选中态。</span></div>
+      <div><code>ExitDialog.kt</code><span>新建。<b>Dialog</b> + <code>glassSurface</code>，图标 + 标题 + 双按钮，无副文案。</span></div>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>两个要提前确认的点。</b><br>
+    一、右上角现在画的是<b>漏斗</b>（<code>PlayerIcons.Filter</code>），气泡方案里我用的是沙漏。要换成真沙漏的话，我顺手把 <code>Filter</code> 的 path 改掉；筛选生效时可以再叠一个 180° 翻转。<br>
+    二、启动画面的图标在 <code>msop_icon.png</code> 里是位图（256×256），放大到 92dp 在 3x 屏上够用但会略糊，建议按现在的几何导出一份矢量 <code>ic_msop_logo.xml</code>，色值与商店图标保持一致。
+  </div>
+</section>
+
+<footer>
+  <span>MSOP · 定稿预览 · 2026-11-17</span>
+  <span>确认无误我就开始改 Compose 代码</span>
+</footer>
+
+</div>
+
+<script>
+  var btn = document.getElementById('themeBtn');
+  var txt = document.getElementById('themeTxt');
+  btn.addEventListener('click', function () {
+    document.body.classList.toggle('light-ui');
+    var light = document.body.classList.contains('light-ui');
+    txt.textContent = light ? '当前预览：浅色' : '当前预览：深色';
+  });
+</script>
+</body>
+</html>
